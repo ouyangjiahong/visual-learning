@@ -10,7 +10,6 @@ import tensorflow as tf
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
-
 def cnn_model_fn(features, labels, mode):
     """Model function for CNN."""
     # Input Layer
@@ -74,11 +73,10 @@ def cnn_model_fn(features, labels, mode):
     # Add evaluation metrics (for EVAL mode)
     eval_metric_ops = {
         "accuracy": tf.metrics.accuracy(
-            labels=labels, predictions=predictions["classes"])}
+            labels=labels, predictions=predictions["classes"])} 
     return tf.estimator.EstimatorSpec(
         mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
-
-
+		
 def main(unused_argv):
     # Load training and eval data
     mnist = tf.contrib.learn.datasets.load_dataset("mnist")
@@ -86,12 +84,14 @@ def main(unused_argv):
     train_labels = np.asarray(mnist.train.labels, dtype=np.int32)
     eval_data = mnist.test.images  # Returns np.array
     eval_labels = np.asarray(mnist.test.labels, dtype=np.int32)
+    
     # Create the Estimator
     mnist_classifier = tf.estimator.Estimator(
-        model_fn=cnn_model_fn, model_dir="/tmp/mnist_convnet_model")
+        model_fn=cnn_model_fn, model_dir="mnist_convnet_model")
     tensors_to_log = {"loss": "loss"}
     logging_hook = tf.train.LoggingTensorHook(
-        tensors=tensors_to_log, every_n_iter=500)
+        tensors=tensors_to_log, every_n_iter=50)
+    
     # Train the model
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": train_data},
@@ -99,19 +99,25 @@ def main(unused_argv):
         batch_size=100,
         num_epochs=None,
         shuffle=True)
-    mnist_classifier.train(
-        input_fn=train_input_fn,
-        steps=20000,
-        hooks=[logging_hook])
+    
     # Evaluate the model and print results
     eval_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": eval_data},
         y=eval_labels,
         num_epochs=1,
         shuffle=False)
-    eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn)
-    print(eval_results)
-
+    
+    
+    max_step = 30000
+    stride = 200
+    
+    for step in xrange(1, max_step, stride):
+        mnist_classifier.train(
+            input_fn=train_input_fn,
+            steps=stride,
+            hooks=[logging_hook])
+        print("evaluate")
+        eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn)
 
 if __name__ == "__main__":
     tf.app.run()
