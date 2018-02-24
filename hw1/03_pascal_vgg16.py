@@ -41,41 +41,117 @@ CLASS_NAMES = [
     'tvmonitor',
 ]
 
+BATCH_SIZE = 10
+IMAGE_SIZE = 256
+IMAGE_CROP_SIZE = 224
+MODEL_PATH = "pascal_model_vgg16"
+max_step = 50000
+stride = 10
+test_num = 20
+
 
 def cnn_model_fn(features, labels, mode, num_classes=20):
     # Build model
-    input_layer = tf.reshape(features["x"], [-1, 256, 256, 3])
+    input_layer = tf.reshape(features["x"], [-1, IMAGE_SIZE, IMAGE_SIZE, 3])
 
-    # Convolutional Layer #1
-    conv1 = tf.layers.conv2d(
-        inputs=input_layer,
-        filters=32,
-        kernel_size=[5, 5],
-        padding="same",
-        activation=tf.nn.relu)
+    def data_augmentation(inputs):
+        for i in xrange(BATCH_SIZE):
+            output = tf.image.random_flip_left_right(inputs[i])
+            output = tf.image.random_contrast(output, 0.9, 1.1)
+            output += tf.random_normal([IMAGE_SIZE, IMAGE_SIZE, 3], 0, 0.1)
+            output = tf.random_crop(output, [IMAGE_CROP_SIZE, IMAGE_CROP_SIZE, 3])
+            output = tf.expand_dims(output, 0)
+            if i == 0:
+                outputs = output
+            else:
+                outputs = tf.concat([outputs, output], 0)
+        return outputs
 
-    # Pooling Layer #1
-    pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[2, 2], strides=2)
+    def center_crop(inputs, size):
+        print(size)
+        ratio = IMAGE_CROP_SIZE / float(IMAGE_SIZE)
+        for i in xrange(size):
+            output = tf.image.central_crop(inputs[i], ratio)
+            output = tf.expand_dims(output, 0)
+            if i == 0:
+                outputs = output
+            else:
+                outputs = tf.concat([outputs, output], 0)
+        return outputs
 
-    # Convolutional Layer #2 and Pooling Layer #2
-    conv2 = tf.layers.conv2d(
-        inputs=pool1,
-        filters=64,
-        kernel_size=[5, 5],
-        padding="same",
-        activation=tf.nn.relu)
-    pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
+    #data augmentation
+    if mode == tf.estimator.ModeKeys.TRAIN:
+        input_layer = data_augmentation(input_layer)
+    else:
+        input_layer = center_crop(input_layer, test_num)
 
-    # Dense Layer
-    print(pool2.shape)
-    pool2_flat = tf.reshape(pool2, [-1, 64 * 64 * 64])
-    dense = tf.layers.dense(inputs=pool2_flat, units=1024,
-                            activation=tf.nn.relu)
-    dropout = tf.layers.dropout(
-        inputs=dense, rate=0.4, training=mode == tf.estimator.ModeKeys.TRAIN)
+    def vgg_conv(input, num_filters):
+        output = tf.layers.conv2d(
+            inputs=input,
+            filters=num_filters,
+            kernel_size=[3, 3],
+            strides=[1, 1],
+            padding="same",
+            activation=tf.nn.relu,
+            kernel_initializer=tf.random_normal_initializer(0, 0.01),
+            bias_initializer=tf.zeros_initializer())
+        return output
+
+    def vgg_maxpool(input):
+        output = tf.layers.max_pooling2d(inputs=input, pool_size=[2, 2], strides=2)
+        return output
+
+    def vgg_dense(input, num_out, std):
+        output = tf.layers.dense(
+            inputs=input, units=num_out,
+            activation=tf.nn.relu,
+            kernel_initializer=tf.random_normal_initializer(0, std),
+            bias_initializer=tf.zeros_initializer())
+        return output
+
+    def vgg_dropout(input):
+        output = tf.layers.dropout(
+            inputs=input, rate=0.5, training=mode == tf.estimator.ModeKeys.TRAIN)
+        return output
+
+    # conv block 1
+    conv1_1 = vgg_conv(input_layer, 64)
+    conv1_2 = vgg_conv(conv1_1, 64)
+    pool1 = vgg_maxpool(conv1_2)
+
+    # conv block 2
+    conv2_1 = vgg_conv(pool1, 128)
+    conv2_2 = vgg_conv(conv2_1, 128)
+    pool2 = vgg_maxpool(conv2_2)
+
+    # conv block 3
+    conv3_1 = vgg_conv(pool2, 256)
+    conv3_2 = vgg_conv(conv3_1, 256)
+    conv3_3 = vgg_conv(conv3_2, 256)
+    pool3 = vgg_maxpool(conv3_3)
+
+    # conv block 4
+    conv4_1 = vgg_conv(pool3, 512)
+    conv4_2 = vgg_conv(conv4_1, 512)
+    conv4_3 = vgg_conv(conv4_2, 512)
+    pool4 = vgg_maxpool(conv4_3)
+
+    # conv block 5
+    conv5_1 = vgg_conv(pool4, 512)
+    conv5_2 = vgg_conv(conv5_1, 512)
+    conv5_3 = vgg_conv(conv5_2, 512)
+    pool5 = vgg_maxpool(conv5_3)
+
+    # dense
+    pool5_flat = tf.reshape(pool5, [-1, 512 * 7 * 7])
+    dense1 = vgg_dense(pool5_flat, 4096, 0.005)
+    dropout1 = vgg_dropout(dense1)
+
+    dense2 = vgg_dense(dropout1, 4096, 0.005)
+    dropout2 = vgg_dropout(dense2)
 
     # Logits Layer
-    logits = tf.layers.dense(inputs=dropout, units=20)
+    logits = vgg_dense(dropout2, 20, 0.01)
 
     predictions = {
         # Generate predictions (for PREDICT and EVAL mode)
@@ -94,7 +170,8 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
 
     # Configure the Training Op (for TRAIN mode)
     if mode == tf.estimator.ModeKeys.TRAIN:
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001)
+        lr = tf.train.exponential_decay(0.001, tf.train.get_global_step(), 10000, 0.5)
+        optimizer = tf.train.MomentumOptimizer(learning_rate=lr, momentum=0.9)
         train_op = optimizer.minimize(
             loss=loss,
             global_step=tf.train.get_global_step())
@@ -138,7 +215,7 @@ def load_pascal(data_dir, split='train'):
         line = line.split(' ')[0]
         img_name = img_dir + line + '.jpg'
         img = sci.imread(img_name)
-        img = sci.imresize(img, (256, 256, 3))
+        img = sci.imresize(img, (IMAGE_SIZE, IMAGE_SIZE, 3))
         img = np.expand_dims(img, axis=0)
         if first_flag == True:
             img_list = img
@@ -148,6 +225,9 @@ def load_pascal(data_dir, split='train'):
     file.close()
     print("finish loading images")
     print(img_list.shape)
+    if split == 'test':
+        global test_num 
+        test_num = img_list.shape[0]
 
     # read labels
     label_list = np.zeros((img_num, 20))
@@ -211,15 +291,15 @@ def main():
     pascal_classifier = tf.estimator.Estimator(
         model_fn=partial(cnn_model_fn,
                          num_classes=train_labels.shape[1]),
-        model_dir="pascal_model_scratch")
+        model_dir=MODEL_PATH)
     tensors_to_log = {"loss": "loss"}
     logging_hook = tf.train.LoggingTensorHook(
-        tensors=tensors_to_log, every_n_iter=10)
+        tensors=tensors_to_log, every_n_iter=100)
     # Train the model
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": train_data, "w": train_weights},
         y=train_labels,
-        batch_size=10,
+        batch_size=BATCH_SIZE,
         num_epochs=None,
         shuffle=True)
     # Evaluate the model and print results
@@ -228,17 +308,14 @@ def main():
         y=eval_labels,
         num_epochs=1,
         shuffle=False)
-
-    max_step = 1000
-    stride = 10
     
     # sess = tf.Session()  
-    # writer = tf.summary.FileWriter("pascal_model_scratch/", sess.graph)
+    # writer = tf.summary.FileWriter("pacal_model_scratch/", sess.graph)
     # holder = tf.placeholder(tf.float32, name="holder") 
 
     map_list = []
     step_list = []
-    for step in xrange(1, max_step, stride):
+    for step in xrange(0, max_step, stride):
         pascal_classifier.train(
             input_fn=train_input_fn,
             steps=stride,
@@ -260,7 +337,6 @@ def main():
         print('per class:')
         for cid, cname in enumerate(CLASS_NAMES):
             print('{}: {}'.format(cname, _get_el(AP, cid)))
-
         # tf.summary.scalar("mAP", holder)
         # merged = tf.summary.merge_all()
         # result = sess.run(merged, feed_dict={holder:np.mean(AP)})
@@ -271,7 +347,7 @@ def main():
     fig = plt.figure()
     plt.plot(step_list, map_list)
     plt.title("mAP")
-    fig.savefig("mAP_plot.jpg")
+    fig.savefig("task3_mAP_plot.jpg")
 
 
 if __name__ == "__main__":
