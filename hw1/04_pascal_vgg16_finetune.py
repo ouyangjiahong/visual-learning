@@ -12,6 +12,9 @@ import scipy.misc as sci
 from PIL import Image
 from functools import partial
 import matplotlib.pyplot as plt
+from tensorflow.python.tools import inspect_checkpoint as chkp
+from tensorflow.python import pywrap_tensorflow
+import os 
 
 from eval import compute_map
 # import model
@@ -45,6 +48,7 @@ BATCH_SIZE = 10
 IMAGE_SIZE = 256
 IMAGE_CROP_SIZE = 224
 MODEL_PATH = "pascal_model_vgg16"
+PRETRAIN_MODEL_PATH = "vgg_16.ckpt"
 max_step = 40000
 stride = 400
 display = 400
@@ -122,40 +126,50 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
     conv1_1 = vgg_conv(input_layer, 64)
     conv1_2 = vgg_conv(conv1_1, 64)
     pool1 = vgg_maxpool(conv1_2)
+    print(conv1_1)
+    print(pool1)
 
     # conv block 2
     conv2_1 = vgg_conv(pool1, 128)
     conv2_2 = vgg_conv(conv2_1, 128)
     pool2 = vgg_maxpool(conv2_2)
+    print(conv2_1)
 
     # conv block 3
     conv3_1 = vgg_conv(pool2, 256)
     conv3_2 = vgg_conv(conv3_1, 256)
     conv3_3 = vgg_conv(conv3_2, 256)
     pool3 = vgg_maxpool(conv3_3)
+    print(conv3_1)
 
     # conv block 4
     conv4_1 = vgg_conv(pool3, 512)
     conv4_2 = vgg_conv(conv4_1, 512)
     conv4_3 = vgg_conv(conv4_2, 512)
     pool4 = vgg_maxpool(conv4_3)
+    print(conv4_1)
 
     # conv block 5
     conv5_1 = vgg_conv(pool4, 512)
     conv5_2 = vgg_conv(conv5_1, 512)
     conv5_3 = vgg_conv(conv5_2, 512)
     pool5 = vgg_maxpool(conv5_3)
+    print(conv5_1)
 
     # dense
     pool5_flat = tf.reshape(pool5, [-1, 512 * 7 * 7])
     dense1 = vgg_dense(pool5_flat, 4096, 0.005)
     dropout1 = vgg_dropout(dense1)
+    print(pool5_flat)
+    print(dense1)
 
     dense2 = vgg_dense(dropout1, 4096, 0.005)
     dropout2 = vgg_dropout(dense2)
+    print(dense2)
 
     # Logits Layer
     logits = vgg_dense(dropout2, 20, 0.01)
+    print(logits)
 
     predictions = {
         # Generate predictions (for PREDICT and EVAL mode)
@@ -180,18 +194,15 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
         train_summary = []
         lr_summary = tf.summary.scalar("learning rate", lr)
         train_summary.append(lr_summary)
+        input_summary = tf.summary.image("input image", input_layer[:3,:,:,:])
+        train_summary.append(input_summary)
 
-        if tf.train.get_global_step() % display == 0:
-            input_summary = tf.summary.image("input image", input_layer[:3,:,:,:])
-            train_summary.append(input_summary)
-
-            tvars = [var for var in tf.trainable_variables()]
-            grads_and_vars = optimizer.compute_gradients(loss, var_list=tvars)
-            for g, v in grads_and_vars:
-                if g is not None:
-                    grad_hist_summary = tf.summary.histogram("{}/grad_histogram".format(v.name), g)
-                    train_summary.append(grad_hist_summary)
-
+        tvars = [var for var in tf.trainable_variables()]
+        grads_and_vars = optimizer.compute_gradients(loss, var_list=tvars)
+        for g, v in grads_and_vars:
+            if g is not None:
+                grad_hist_summary = tf.summary.histogram("{}/grad_histogram".format(v.name), g)
+                train_summary.append(grad_hist_summary)
 
         # summary_hook = tf.train.SummarySaverHook(stride, ouput_dir=MODEL_PATH, summary_op=tf.summary.merge(train_summary))
         summary_hook = tf.train.SummarySaverHook(display, summary_op=tf.summary.merge(train_summary))
@@ -307,6 +318,20 @@ def _get_el(arr, i):
     except IndexError:
         return arr
 
+def load_model():
+    # chkp.print_tensors_in_checkpoint_file(PRETRAIN_MODEL_PATH, tensor_name='', all_tensors=True)
+    checkpoint_path = os.path.join(PRETRAIN_MODEL_PATH)
+    reader = tf.train.NewCheckpointReader(checkpoint_path)
+    var_map = reader.get_variable_to_shape_map()
+    # for key in var_map:
+    #     print("tensor_name: ", key)
+    #     print(reader.get_tensor(key).shape) # Remove this is you want to print only variable names
+    print(var_map)
+    assign_op, feed_dict = tf.contrib.framework.assign_from_values(var_map)
+    print(assign_op)
+    return var_map
+
+
 
 def main():
     args = parse_args()
@@ -316,9 +341,11 @@ def main():
     eval_data, eval_labels, eval_weights = load_pascal(
         args.data_dir, split='test')
 
+    var_map = load_model()
+
     pascal_classifier = tf.estimator.Estimator(
         model_fn=partial(cnn_model_fn,
-                         num_classes=train_labels.shape[1]),
+        num_classes=train_labels.shape[1]),
         model_dir=MODEL_PATH)
 
     tensors_to_log = {"loss": "loss"}

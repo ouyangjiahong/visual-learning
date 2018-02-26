@@ -41,17 +41,20 @@ CLASS_NAMES = [
     'tvmonitor',
 ]
 
-BATCH_SIZE = 100
+BATCH_SIZE = 10
 IMAGE_SIZE = 256
 IMAGE_CROP_SIZE = 224
 max_step = 50000
-stride = 500
-test_num = 20
+stride = 2
+# test_num = 10
 
 
 def cnn_model_fn(features, labels, mode, num_classes=20):
     # Build model
-    input_layer = tf.reshape(features["x"], [-1, IMAGE_SIZE, IMAGE_SIZE, 3])
+    if mode == tf.estimator.ModeKeys.TRAIN:
+        input_layer = tf.reshape(features["x"], [-1, IMAGE_SIZE, IMAGE_SIZE, 3])
+    else:
+        input_layer = tf.reshape(features["x"], [-1, IMAGE_CROP_SIZE, IMAGE_CROP_SIZE, 3])
 
     def data_augmentation(inputs):
         for i in xrange(BATCH_SIZE):
@@ -66,23 +69,23 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
                 outputs = tf.concat([outputs, output], 0)
         return outputs
 
-    def center_crop(inputs, size):
-        print(size)
-        ratio = IMAGE_CROP_SIZE / float(IMAGE_SIZE)
-        for i in xrange(size):
-            output = tf.image.central_crop(inputs[i], ratio)
-            output = tf.expand_dims(output, 0)
-            if i == 0:
-                outputs = output
-            else:
-                outputs = tf.concat([outputs, output], 0)
-        return outputs
+    # def center_crop(inputs, size):
+    #     print(size)
+    #     ratio = IMAGE_CROP_SIZE / float(IMAGE_SIZE)
+    #     for i in xrange(size):
+    #         output = tf.image.central_crop(inputs[i], ratio)
+    #         output = tf.expand_dims(output, 0)
+    #         if i == 0:
+    #             outputs = output
+    #         else:
+    #             outputs = tf.concat([outputs, output], 0)
+    #     return outputs
 
     #data augmentation
     if mode == tf.estimator.ModeKeys.TRAIN:
         input_layer = data_augmentation(input_layer)
-    else:
-        input_layer = center_crop(input_layer, test_num)
+    # else:
+    #     input_layer = center_crop(input_layer, test_num)
     print(input_layer.shape)
 
     # Convolutional Layer #1
@@ -212,17 +215,22 @@ def load_pascal(data_dir, split='train'):
     label_dir = data_dir + 'ImageSets/Main/'
 
     # read images
-    label_path = label_dir + 'aeroplane_' + split + '.txt'
+    # label_path = label_dir + 'aeroplane_' + split + '.txt'
+    label_path = label_dir + split + '.txt'
     file = open(label_path, 'r')
     lines = file.readlines()
     img_num = len(lines)
     first_flag = True
+    margin = (IMAGE_SIZE - IMAGE_CROP_SIZE) // 2
 
     for line in lines:
-        line = line.split(' ')[0]
+        # line = line.split(' ')[0]
+        line = line[:6]
         img_name = img_dir + line + '.jpg'
         img = sci.imread(img_name)
         img = sci.imresize(img, (IMAGE_SIZE, IMAGE_SIZE, 3))
+        if split == 'test':
+            img = img[margin:IMAGE_CROP_SIZE+margin, margin:IMAGE_CROP_SIZE+margin, :]
         img = np.expand_dims(img, axis=0)
         if first_flag == True:
             img_list = img
@@ -230,10 +238,11 @@ def load_pascal(data_dir, split='train'):
         else:
             img_list = np.concatenate((img_list, img), axis=0)        
     file.close()
+    print(img_list.shape)
     print("finish loading images")
-    if split == 'test':
-        global test_num 
-        test_num = img_list.shape[0]
+    # if split == 'test':
+    #     global test_num 
+    #     test_num = img_list.shape[0]
 
     # read labels
     label_list = np.zeros((img_num, 20))
