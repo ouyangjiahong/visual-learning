@@ -46,9 +46,8 @@ IMAGE_SIZE = 256
 IMAGE_CROP_SIZE = 224
 MODEL_PATH = "pascal_model_vgg16"
 max_step = 40000
-stride = 400
-display = 400
-# test_num = 10
+stride = 20
+display = 10
 
 
 def cnn_model_fn(features, labels, mode, num_classes=20):
@@ -96,9 +95,9 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
             kernel_size=[3, 3],
             strides=[1, 1],
             padding="same",
-            activation=tf.nn.relu,
+            activation=tf.nn.relu)
             # kernel_initializer=tf.random_normal_initializer(0, 0.01),
-            bias_initializer=tf.zeros_initializer())
+            # bias_initializer=tf.zeros_initializer())
         return output
 
     def vgg_maxpool(input):
@@ -108,9 +107,9 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
     def vgg_dense(input, num_out, std):
         output = tf.layers.dense(
             inputs=input, units=num_out,
-            activation=tf.nn.relu,
+            activation=tf.nn.relu)
             # kernel_initializer=tf.random_normal_initializer(0, std),
-            bias_initializer=tf.zeros_initializer())
+            # bias_initializer=tf.zeros_initializer())
         return output
 
     def vgg_dropout(input):
@@ -177,30 +176,23 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
         lr = tf.train.exponential_decay(0.001, tf.train.get_global_step(), 10000, 0.5)
         optimizer = tf.train.MomentumOptimizer(learning_rate=lr, momentum=0.9)
 
-        train_summary = []
-        lr_summary = tf.summary.scalar("learning rate", lr)
-        train_summary.append(lr_summary)
+        grads_and_vars = optimizer.compute_gradients(loss)
 
-        if tf.train.get_global_step() % display == 0:
-            input_summary = tf.summary.image("input image", input_layer[:3,:,:,:])
-            train_summary.append(input_summary)
-
-            tvars = [var for var in tf.trainable_variables()]
-            grads_and_vars = optimizer.compute_gradients(loss, var_list=tvars)
-            for g, v in grads_and_vars:
-                if g is not None:
-                    grad_hist_summary = tf.summary.histogram("{}/grad_histogram".format(v.name), g)
-                    train_summary.append(grad_hist_summary)
-
-
-        # summary_hook = tf.train.SummarySaverHook(stride, ouput_dir=MODEL_PATH, summary_op=tf.summary.merge(train_summary))
-        summary_hook = tf.train.SummarySaverHook(display, summary_op=tf.summary.merge(train_summary))
+        tf.summary.scalar("learning rate", lr)
+        tf.summary.image("input image", input_layer[:3,:,:,:])
+        for g, v in grads_and_vars:
+            if g is not None:
+                tf.summary.histogram("{}/grad_histogram".format(v.name), g)
+        
+        # summary_hook = tf.train.SummarySaverHook(display, summary_op=tf.summary.merge_all())
 
         train_op = optimizer.minimize(
             loss=loss,
             global_step=tf.train.get_global_step())
         return tf.estimator.EstimatorSpec(
-            mode=mode, loss=loss, train_op=train_op, training_hooks=[summary_hook])
+            mode=mode, loss=loss, train_op=train_op)
+        # return tf.estimator.EstimatorSpec(
+        #     mode=mode, loss=loss, train_op=train_op, training_hooks=[summary_hook])
 
     # Add evaluation metrics (for EVAL mode)
     eval_metric_ops = {
@@ -229,7 +221,6 @@ def load_pascal(data_dir, split='train'):
     label_dir = data_dir + 'ImageSets/Main/'
 
     # read images
-    # label_path = label_dir + 'aeroplane_' + split + '.txt'
     label_path = label_dir + split + '.txt'
     file = open(label_path, 'r')
     lines = file.readlines()
@@ -237,12 +228,20 @@ def load_pascal(data_dir, split='train'):
     first_flag = True
     margin = (IMAGE_SIZE - IMAGE_CROP_SIZE) // 2
 
+    mean_value = [123, 116, 103]
+    mean_r = np.tile(np.array(mean_value[0]), (IMAGE_SIZE, IMAGE_SIZE))
+    mean_g = np.tile(np.array(mean_value[1]), (IMAGE_SIZE, IMAGE_SIZE))
+    mean_b = np.tile(np.array(mean_value[2]), (IMAGE_SIZE, IMAGE_SIZE))
+    mean = np.stack((mean_r, mean_g, mean_b), axis=2)
+    print(mean.shape)
+
     for line in lines:
-        # line = line.split(' ')[0]
         line = line[:6]
         img_name = img_dir + line + '.jpg'
         img = sci.imread(img_name)
         img = sci.imresize(img, (IMAGE_SIZE, IMAGE_SIZE, 3))
+        img = np.subtract(img, mean)
+
         if split == 'test':
             img = img[margin:IMAGE_CROP_SIZE+margin, margin:IMAGE_CROP_SIZE+margin, :]
         img = np.expand_dims(img, axis=0)
@@ -250,12 +249,14 @@ def load_pascal(data_dir, split='train'):
             img_list = img
             first_flag = False
         else:
-            img_list = np.concatenate((img_list, img), axis=0)        
+            img_list = np.concatenate((img_list, img), axis=0) 
+
     file.close()
     print("finish loading images")
-    # if split == 'test':
-    #     global test_num 
-    #     test_num = img_list.shape[0]
+    img_list = img_list.astype(np.float32)
+    img_list /= 255.0
+    img_list -= 0.5
+    img_list *= 2       
 
     # read labels
     label_list = np.zeros((img_num, 20))
@@ -273,8 +274,8 @@ def load_pascal(data_dir, split='train'):
             if label == 1:
                 label_list[img_pos, cls_pos] = 1
                 weight_list[img_pos, cls_pos] = 1
-            elif label == 0:
-                label_list[img_pos, cls_pos] = 1
+            # elif label == 0:
+            #     label_list[img_pos, cls_pos] = 1
             else:
                 weight_list[img_pos, cls_pos] = 1
             img_pos += 1
@@ -310,6 +311,7 @@ def _get_el(arr, i):
 
 def main():
     args = parse_args()
+
     # Load training and eval data
     train_data, train_labels, train_weights = load_pascal(
         args.data_dir, split='trainval')
@@ -318,14 +320,12 @@ def main():
 
     pascal_classifier = tf.estimator.Estimator(
         model_fn=partial(cnn_model_fn,
-                         num_classes=train_labels.shape[1]),
+        num_classes=train_labels.shape[1]),
         model_dir=MODEL_PATH)
 
     tensors_to_log = {"loss": "loss"}
     logging_hook = tf.train.LoggingTensorHook(
-        tensors=tensors_to_log, every_n_iter=100)
-    # summary_hook = tf.train.SummarySaverHook(stride, ouput_dir=MODEL_PATH, 
-    #     summary_op=tf.summary.merge_all())
+        tensors=tensors_to_log, every_n_iter=500)
 
     # Train the model
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
@@ -341,9 +341,6 @@ def main():
         num_epochs=1,
         shuffle=False)
     
-    # sess = tf.Session()  
-    # writer = tf.summary.FileWriter("pacal_model_scratch/", sess.graph)
-    # holder = tf.placeholder(tf.float32, name="holder") 
 
     map_list = []
     step_list = []
@@ -369,12 +366,14 @@ def main():
         print('per class:')
         for cid, cname in enumerate(CLASS_NAMES):
             print('{}: {}'.format(cname, _get_el(AP, cid)))
-        # tf.summary.scalar("mAP", holder)
-        # merged = tf.summary.merge_all()
-        # result = sess.run(merged, feed_dict={holder:np.mean(AP)})
-        # writer.add_summary(result, step) 
+
         map_list.append(np.mean(AP))
         step_list.append(step)
+        if step % 10000 == 0:
+            fig = plt.figure()
+            plt.plot(step_list, map_list)
+            plt.title("mAP")
+            fig.savefig("task3_mAP_plot.jpg")
 
     fig = plt.figure()
     plt.plot(step_list, map_list)

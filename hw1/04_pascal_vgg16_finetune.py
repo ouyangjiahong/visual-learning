@@ -47,11 +47,11 @@ CLASS_NAMES = [
 BATCH_SIZE = 10
 IMAGE_SIZE = 256
 IMAGE_CROP_SIZE = 224
-MODEL_PATH = "pascal_model_vgg16"
+MODEL_PATH = "pascal_model_vgg16_finetune"
 PRETRAIN_MODEL_PATH = "vgg_16.ckpt"
-max_step = 40000
-stride = 400
-display = 400
+max_step = 4000
+stride = 20
+display = 10
 # test_num = 10
 
 
@@ -90,10 +90,11 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
     #data augmentation
     if mode == tf.estimator.ModeKeys.TRAIN:
         input_layer = data_augmentation(input_layer)
-    # else:
-    #     input_layer = center_crop(input_layer, test_num)
 
-    def vgg_conv(input, num_filters):
+    # load pretrained model
+    reader = pywrap_tensorflow.NewCheckpointReader(PRETRAIN_MODEL_PATH)
+
+    def vgg_conv(input, num_filters, k_init, b_init):
         output = tf.layers.conv2d(
             inputs=input,
             filters=num_filters,
@@ -101,20 +102,20 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
             strides=[1, 1],
             padding="same",
             activation=tf.nn.relu,
-            # kernel_initializer=tf.random_normal_initializer(0, 0.01),
-            bias_initializer=tf.zeros_initializer())
+            kernel_initializer=k_init,
+            bias_initializer=b_init)
         return output
 
     def vgg_maxpool(input):
         output = tf.layers.max_pooling2d(inputs=input, pool_size=[2, 2], strides=2)
         return output
 
-    def vgg_dense(input, num_out, std):
+    def vgg_dense(input, num_out, k_init, b_init):
         output = tf.layers.dense(
             inputs=input, units=num_out,
             activation=tf.nn.relu,
-            # kernel_initializer=tf.random_normal_initializer(0, std),
-            bias_initializer=tf.zeros_initializer())
+            kernel_initializer=k_init,
+            bias_initializer=b_init)
         return output
 
     def vgg_dropout(input):
@@ -122,54 +123,75 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
             inputs=input, rate=0.5, training=mode == tf.estimator.ModeKeys.TRAIN)
         return output
 
+    # define the network
     # conv block 1
-    conv1_1 = vgg_conv(input_layer, 64)
-    conv1_2 = vgg_conv(conv1_1, 64)
+    conv1_1 = vgg_conv(input_layer, 64, 
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv1/conv1_1/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv1/conv1_1/biases')))
+    conv1_2 = vgg_conv(conv1_1, 64,
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv1/conv1_2/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv1/conv1_2/biases')))
     pool1 = vgg_maxpool(conv1_2)
-    print(conv1_1)
-    print(pool1)
 
     # conv block 2
-    conv2_1 = vgg_conv(pool1, 128)
-    conv2_2 = vgg_conv(conv2_1, 128)
+    conv2_1 = vgg_conv(pool1, 128,
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv2/conv2_1/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv2/conv2_1/biases')))
+    conv2_2 = vgg_conv(conv2_1, 128,
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv2/conv2_2/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv2/conv2_2/biases')))
     pool2 = vgg_maxpool(conv2_2)
-    print(conv2_1)
 
     # conv block 3
-    conv3_1 = vgg_conv(pool2, 256)
-    conv3_2 = vgg_conv(conv3_1, 256)
-    conv3_3 = vgg_conv(conv3_2, 256)
+    conv3_1 = vgg_conv(pool2, 256,
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv3/conv3_1/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv3/conv3_1/biases')))
+    conv3_2 = vgg_conv(conv3_1, 256,
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv3/conv3_2/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv3/conv3_2/biases')))
+    conv3_3 = vgg_conv(conv3_2, 256,
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv3/conv3_3/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv3/conv3_3/biases')))
     pool3 = vgg_maxpool(conv3_3)
-    print(conv3_1)
 
     # conv block 4
-    conv4_1 = vgg_conv(pool3, 512)
-    conv4_2 = vgg_conv(conv4_1, 512)
-    conv4_3 = vgg_conv(conv4_2, 512)
+    conv4_1 = vgg_conv(pool3, 512,
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv4/conv4_1/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv4/conv4_1/biases')))
+    conv4_2 = vgg_conv(conv4_1, 512,
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv4/conv4_2/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv4/conv4_2/biases')))
+    conv4_3 = vgg_conv(conv4_2, 512,
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv4/conv4_3/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv4/conv4_3/biases')))
     pool4 = vgg_maxpool(conv4_3)
-    print(conv4_1)
 
     # conv block 5
-    conv5_1 = vgg_conv(pool4, 512)
-    conv5_2 = vgg_conv(conv5_1, 512)
-    conv5_3 = vgg_conv(conv5_2, 512)
+    conv5_1 = vgg_conv(pool4, 512,
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv5/conv5_1/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv5/conv5_1/biases')))
+    conv5_2 = vgg_conv(conv5_1, 512,
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv5/conv5_2/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv5/conv5_2/biases')))
+    conv5_3 = vgg_conv(conv5_2, 512,
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv5/conv5_3/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/conv5/conv5_3/biases')))
     pool5 = vgg_maxpool(conv5_3)
-    print(conv5_1)
 
     # dense
     pool5_flat = tf.reshape(pool5, [-1, 512 * 7 * 7])
-    dense1 = vgg_dense(pool5_flat, 4096, 0.005)
-    dropout1 = vgg_dropout(dense1)
-    print(pool5_flat)
-    print(dense1)
+    fc6 = vgg_dense(pool5_flat, 4096,
+                    tf.constant_initializer(reader.get_tensor('vgg_16/fc6/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/fc6/biases')))
+    dropout1 = vgg_dropout(fc6)
 
-    dense2 = vgg_dense(dropout1, 4096, 0.005)
-    dropout2 = vgg_dropout(dense2)
-    print(dense2)
+    fc7 = vgg_dense(dropout1, 4096, 
+                    tf.constant_initializer(reader.get_tensor('vgg_16/fc7/weights')),
+                    tf.constant_initializer(reader.get_tensor('vgg_16/fc7/biases')))
+    dropout2 = vgg_dropout(fc7)
 
     # Logits Layer
-    logits = vgg_dense(dropout2, 20, 0.01)
-    print(logits)
+    logits = vgg_dense(dropout2, 20, None, None)
 
     predictions = {
         # Generate predictions (for PREDICT and EVAL mode)
@@ -188,30 +210,22 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
 
     # Configure the Training Op (for TRAIN mode)
     if mode == tf.estimator.ModeKeys.TRAIN:
-        lr = tf.train.exponential_decay(0.001, tf.train.get_global_step(), 10000, 0.5)
+        lr = tf.train.exponential_decay(0.0001, tf.train.get_global_step(), 1000, 0.5)
         optimizer = tf.train.MomentumOptimizer(learning_rate=lr, momentum=0.9)
 
-        train_summary = []
-        lr_summary = tf.summary.scalar("learning rate", lr)
-        train_summary.append(lr_summary)
-        input_summary = tf.summary.image("input image", input_layer[:3,:,:,:])
-        train_summary.append(input_summary)
+        tf.summary.scalar("learning rate", lr)
+        tf.summary.image("input image", input_layer[:3,:,:,:])
+        # for g, v in grads_and_vars:
+        #     if g is not None:
+        #         tf.summary.histogram("{}/grad_histogram".format(v.name), g)
 
-        tvars = [var for var in tf.trainable_variables()]
-        grads_and_vars = optimizer.compute_gradients(loss, var_list=tvars)
-        for g, v in grads_and_vars:
-            if g is not None:
-                grad_hist_summary = tf.summary.histogram("{}/grad_histogram".format(v.name), g)
-                train_summary.append(grad_hist_summary)
-
-        # summary_hook = tf.train.SummarySaverHook(stride, ouput_dir=MODEL_PATH, summary_op=tf.summary.merge(train_summary))
-        summary_hook = tf.train.SummarySaverHook(display, summary_op=tf.summary.merge(train_summary))
+        # summary_hook = tf.train.SummarySaverHook(display, summary_op=tf.summary.merge_all())
 
         train_op = optimizer.minimize(
             loss=loss,
             global_step=tf.train.get_global_step())
         return tf.estimator.EstimatorSpec(
-            mode=mode, loss=loss, train_op=train_op, training_hooks=[summary_hook])
+            mode=mode, loss=loss, train_op=train_op)
 
     # Add evaluation metrics (for EVAL mode)
     eval_metric_ops = {
@@ -240,7 +254,6 @@ def load_pascal(data_dir, split='train'):
     label_dir = data_dir + 'ImageSets/Main/'
 
     # read images
-    # label_path = label_dir + 'aeroplane_' + split + '.txt'
     label_path = label_dir + split + '.txt'
     file = open(label_path, 'r')
     lines = file.readlines()
@@ -248,12 +261,20 @@ def load_pascal(data_dir, split='train'):
     first_flag = True
     margin = (IMAGE_SIZE - IMAGE_CROP_SIZE) // 2
 
+    mean_value = [123, 116, 103]
+    mean_r = np.tile(np.array(mean_value[0]), (IMAGE_SIZE, IMAGE_SIZE))
+    mean_g = np.tile(np.array(mean_value[1]), (IMAGE_SIZE, IMAGE_SIZE))
+    mean_b = np.tile(np.array(mean_value[2]), (IMAGE_SIZE, IMAGE_SIZE))
+    mean = np.stack((mean_r, mean_g, mean_b), axis=2)
+    print(mean.shape)
+
     for line in lines:
-        # line = line.split(' ')[0]
         line = line[:6]
         img_name = img_dir + line + '.jpg'
         img = sci.imread(img_name)
         img = sci.imresize(img, (IMAGE_SIZE, IMAGE_SIZE, 3))
+        img = np.subtract(img, mean)
+
         if split == 'test':
             img = img[margin:IMAGE_CROP_SIZE+margin, margin:IMAGE_CROP_SIZE+margin, :]
         img = np.expand_dims(img, axis=0)
@@ -261,12 +282,14 @@ def load_pascal(data_dir, split='train'):
             img_list = img
             first_flag = False
         else:
-            img_list = np.concatenate((img_list, img), axis=0)        
+            img_list = np.concatenate((img_list, img), axis=0) 
+
     file.close()
     print("finish loading images")
-    # if split == 'test':
-    #     global test_num 
-    #     test_num = img_list.shape[0]
+    img_list = img_list.astype(np.float32)
+    img_list /= 255.0
+    img_list -= 0.5
+    img_list *= 2       
 
     # read labels
     label_list = np.zeros((img_num, 20))
@@ -284,8 +307,8 @@ def load_pascal(data_dir, split='train'):
             if label == 1:
                 label_list[img_pos, cls_pos] = 1
                 weight_list[img_pos, cls_pos] = 1
-            elif label == 0:
-                label_list[img_pos, cls_pos] = 1
+            # elif label == 0:
+            #     label_list[img_pos, cls_pos] = 1
             else:
                 weight_list[img_pos, cls_pos] = 1
             img_pos += 1
@@ -318,30 +341,59 @@ def _get_el(arr, i):
     except IndexError:
         return arr
 
-def load_model():
-    # chkp.print_tensors_in_checkpoint_file(PRETRAIN_MODEL_PATH, tensor_name='', all_tensors=True)
-    checkpoint_path = os.path.join(PRETRAIN_MODEL_PATH)
-    reader = tf.train.NewCheckpointReader(checkpoint_path)
-    var_map = reader.get_variable_to_shape_map()
-    # for key in var_map:
-    #     print("tensor_name: ", key)
-    #     print(reader.get_tensor(key).shape) # Remove this is you want to print only variable names
-    print(var_map)
-    assign_op, feed_dict = tf.contrib.framework.assign_from_values(var_map)
-    print(assign_op)
-    return var_map
 
+# class _LoadHook(tf.train.SessionRunHook):
+#     '''define load pretrain model hook'''
+#     def begin(self):
+#         var_map = { 'vgg_16/conv1/conv1_1/weights' : 'conv2d_1/kernel',
+#                 'vgg_16/conv1/conv1_1/biases' : 'conv2d_1/bias',
+#                 'vgg_16/conv1/conv1_2/weights' : 'conv2d_2/kernel',
+#                 'vgg_16/conv1/conv1_2/biases' : 'conv2d_2/bias',
+#                 'vgg_16/conv2/conv2_1/weights' : 'conv2d_3/kernel',
+#                 'vgg_16/conv2/conv2_1/biases' : 'conv2d_3/bias',
+#                 'vgg_16/conv2/conv2_2/weights' : 'conv2d_4/kernel',
+#                 'vgg_16/conv2/conv2_2/biases' : 'conv2d_4/bias',
+#                 'vgg_16/conv3/conv3_1/weights' : 'conv2d_5/kernel',
+#                 'vgg_16/conv3/conv3_1/biases' : 'conv2d_5/bias',
+#                 'vgg_16/conv3/conv3_2/weights' : 'conv2d_6/kernel',
+#                 'vgg_16/conv3/conv3_2/biases' : 'conv2d_6/bias',
+#                 'vgg_16/conv3/conv3_3/weights' : 'conv2d_7/kernel',
+#                 'vgg_16/conv3/conv3_3/biases' : 'conv2d_7/bias',
+#                 'vgg_16/conv4/conv4_1/weights' : 'conv2d_8/kernel',
+#                 'vgg_16/conv4/conv4_1/biases' : 'conv2d_8/bias',
+#                 'vgg_16/conv4/conv4_2/weights' : 'conv2d_9/kernel',
+#                 'vgg_16/conv4/conv4_2/biases' : 'conv2d_9/bias',
+#                 'vgg_16/conv4/conv4_3/weights' : 'conv2d_10/kernel',
+#                 'vgg_16/conv4/conv4_3/biases' : 'conv2d_10/bias',
+#                 'vgg_16/conv5/conv5_1/weights' : 'conv2d_11/kernel',
+#                 'vgg_16/conv5/conv5_1/biases' : 'conv2d_11/bias',
+#                 'vgg_16/conv5/conv5_2/weights' : 'conv2d_12/kernel',
+#                 'vgg_16/conv5/conv5_2/biases' : 'conv2d_12/bias',
+#                 'vgg_16/conv5/conv5_3/weights' : 'conv2d_13/kernel',
+#                 'vgg_16/conv5/conv5_3/biases' : 'conv2d_13/bias',
+#                 'vgg_16/fc6/weights' : 'dense/kernel',
+#                 'vgg_16/fc6/biases' : 'dense/bias',
+#                 'vgg_16/fc7/weights' : 'dense_2/kernel',
+#                 'vgg_16/fc7/biases' : 'dense_2/bias'}
+#         tf.contrib.framework.init_from_checkpoint(PRETRAIN_MODEL_PATH, var_map)
 
 
 def main():
     args = parse_args()
+
     # Load training and eval data
     train_data, train_labels, train_weights = load_pascal(
         args.data_dir, split='trainval')
     eval_data, eval_labels, eval_weights = load_pascal(
         args.data_dir, split='test')
 
-    var_map = load_model()
+    # print pre-trained model structure
+    # checkpoint_path = os.path.join("vgg_16.ckpt")
+    # reader = pywrap_tensorflow.NewCheckpointReader(checkpoint_path)
+    # var_to_shape_map = reader.get_variable_to_shape_map()
+    # for key in sorted(var_to_shape_map):
+    #     print("tensor_name: ", key)
+    #     print(reader.get_tensor(key).shape) 
 
     pascal_classifier = tf.estimator.Estimator(
         model_fn=partial(cnn_model_fn,
@@ -351,8 +403,7 @@ def main():
     tensors_to_log = {"loss": "loss"}
     logging_hook = tf.train.LoggingTensorHook(
         tensors=tensors_to_log, every_n_iter=100)
-    # summary_hook = tf.train.SummarySaverHook(stride, ouput_dir=MODEL_PATH, 
-    #     summary_op=tf.summary.merge_all())
+    # loading_hook = _LoadHook()
 
     # Train the model
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
@@ -361,16 +412,13 @@ def main():
         batch_size=BATCH_SIZE,
         num_epochs=None,
         shuffle=True)
+
     # Evaluate the model and print results
     eval_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": eval_data, "w": eval_weights},
         y=eval_labels,
         num_epochs=1,
         shuffle=False)
-    
-    # sess = tf.Session()  
-    # writer = tf.summary.FileWriter("pacal_model_scratch/", sess.graph)
-    # holder = tf.placeholder(tf.float32, name="holder") 
 
     map_list = []
     step_list = []
@@ -379,9 +427,11 @@ def main():
             input_fn=train_input_fn,
             steps=stride,
             hooks=[logging_hook])
+            # hooks=[logging_hook, loading_hook])
         print("evaluate")
         # eval_results = pascal_classifier.evaluate(input_fn=eval_input_fn)
 
+        # compute mAP
         pred = list(pascal_classifier.predict(input_fn=eval_input_fn))
         pred = np.stack([p['probabilities'] for p in pred])
         rand_AP = compute_map(
@@ -396,17 +446,20 @@ def main():
         print('per class:')
         for cid, cname in enumerate(CLASS_NAMES):
             print('{}: {}'.format(cname, _get_el(AP, cid)))
-        # tf.summary.scalar("mAP", holder)
-        # merged = tf.summary.merge_all()
-        # result = sess.run(merged, feed_dict={holder:np.mean(AP)})
-        # writer.add_summary(result, step) 
+
+        # save mAP
         map_list.append(np.mean(AP))
         step_list.append(step)
+        if step % 10000 == 0:
+            fig = plt.figure()
+            plt.plot(step_list, map_list)
+            plt.title("mAP")
+            fig.savefig("task4_mAP_plot.jpg")
 
     fig = plt.figure()
     plt.plot(step_list, map_list)
     plt.title("mAP")
-    fig.savefig("task3_mAP_plot.jpg")
+    fig.savefig("task4_mAP_plot.jpg")
 
 
 if __name__ == "__main__":
