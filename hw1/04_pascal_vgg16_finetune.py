@@ -257,6 +257,7 @@ def load_pascal(data_dir, split='train'):
     label_path = label_dir + split + '.txt'
     file = open(label_path, 'r')
     lines = file.readlines()
+    file.close()
     img_num = len(lines)
     first_flag = True
     margin = (IMAGE_SIZE - IMAGE_CROP_SIZE) // 2
@@ -268,6 +269,12 @@ def load_pascal(data_dir, split='train'):
     mean = np.stack((mean_r, mean_g, mean_b), axis=2)
     print(mean.shape)
 
+    if split != 'test':
+        img_list = np.zeros((len(lines), IMAGE_SIZE, IMAGE_SIZE, 3))
+    else:
+        img_list = np.zeros((len(lines), IMAGE_CROP_SIZE, IMAGE_CROP_SIZE, 3))
+
+    count = 0
     for line in lines:
         line = line[:6]
         img_name = img_dir + line + '.jpg'
@@ -277,14 +284,11 @@ def load_pascal(data_dir, split='train'):
 
         if split == 'test':
             img = img[margin:IMAGE_CROP_SIZE+margin, margin:IMAGE_CROP_SIZE+margin, :]
-        img = np.expand_dims(img, axis=0)
-        if first_flag == True:
-            img_list = img
-            first_flag = False
-        else:
-            img_list = np.concatenate((img_list, img), axis=0) 
+        img_list[count, :, :, :] = img
+        count += 1
+        if count % 1000 == 1:
+            print(count)
 
-    file.close()
     print("finish loading images")
     img_list = img_list.astype(np.float32)
     img_list /= 255.0
@@ -301,6 +305,7 @@ def load_pascal(data_dir, split='train'):
         # load images
         file = open(label_path, 'r')
         lines = file.readlines()
+        file.close()
         for line in lines:
             label = line.split()[1]
             label = int(label)
@@ -313,7 +318,6 @@ def load_pascal(data_dir, split='train'):
                 weight_list[img_pos, cls_pos] = 1
             img_pos += 1
         cls_pos += 1
-        file.close()
     print("finish loading label")
 
     img_list = img_list.astype(np.float32)
