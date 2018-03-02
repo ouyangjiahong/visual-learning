@@ -12,6 +12,8 @@ import scipy.misc as sci
 from PIL import Image
 from functools import partial
 import matplotlib.pyplot as plt
+from tensorflow.python.tools import inspect_checkpoint as chkp
+from tensorflow.python import pywrap_tensorflow
 
 from eval import compute_map
 # import model
@@ -44,10 +46,10 @@ CLASS_NAMES = [
 BATCH_SIZE = 10
 IMAGE_SIZE = 256
 IMAGE_CROP_SIZE = 224
-MODEL_PATH = "pascal_model_vgg16"
 max_step = 40000
-stride = 400
-display = 400
+stride = 4000
+# stride = 1
+# test_num = 10
 
 
 def cnn_model_fn(features, labels, mode, num_classes=20):
@@ -60,8 +62,8 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
     def data_augmentation(inputs):
         for i in xrange(BATCH_SIZE):
             output = tf.image.random_flip_left_right(inputs[i])
-            # output = tf.image.random_contrast(output, 0.95, 1.05)
-            # output += tf.random_normal([IMAGE_SIZE, IMAGE_SIZE, 3], 0, 0.1)
+            output = tf.image.random_contrast(output, 0.9, 1.1)
+            output += tf.random_normal([IMAGE_SIZE, IMAGE_SIZE, 3], 0, 0.1)
             output = tf.random_crop(output, [IMAGE_CROP_SIZE, IMAGE_CROP_SIZE, 3])
             output = tf.expand_dims(output, 0)
             if i == 0:
@@ -88,73 +90,80 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
     # else:
     #     input_layer = center_crop(input_layer, test_num)
 
-    def vgg_conv(input, num_filters):
-        output = tf.layers.conv2d(
-            inputs=input,
-            filters=num_filters,
-            kernel_size=[3, 3],
-            strides=[1, 1],
-            padding="same",
-            activation=tf.nn.relu)
-            # kernel_initializer=tf.random_normal_initializer(0, 0.01),
-            # bias_initializer=tf.zeros_initializer())
-        return output
+    # Convolutional Layer #1
+    conv1 = tf.layers.conv2d(
+        inputs=input_layer,
+        filters=96,
+        kernel_size=[11, 11],
+        strides=[4, 4],
+        padding="valid",
+        activation=tf.nn.relu,
+        kernel_initializer=tf.random_normal_initializer(0, 0.01),
+        bias_initializer=tf.zeros_initializer())
+    # Pooling Layer #1
+    pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=2)
 
-    def vgg_maxpool(input):
-        output = tf.layers.max_pooling2d(inputs=input, pool_size=[2, 2], strides=2)
-        return output
+    # Convolutional Layer #2 and Pooling Layer #2
+    conv2 = tf.layers.conv2d(
+        inputs=pool1,
+        filters=256,
+        kernel_size=[5, 5],
+        padding="same",
+        activation=tf.nn.relu,
+        kernel_initializer=tf.random_normal_initializer(0, 0.01),
+        bias_initializer=tf.zeros_initializer())
+    pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2)
 
-    def vgg_dense(input, num_out, std):
-        output = tf.layers.dense(
-            inputs=input, units=num_out,
-            activation=tf.nn.relu)
-            # kernel_initializer=tf.random_normal_initializer(0, std),
-            # bias_initializer=tf.zeros_initializer())
-        return output
+    # Convolutional Layer #3
+    conv3 = tf.layers.conv2d(
+        inputs=pool2,
+        filters=384,
+        kernel_size=[3, 3],
+        padding="same",
+        activation=tf.nn.relu,
+        kernel_initializer=tf.random_normal_initializer(0, 0.01),
+        bias_initializer=tf.zeros_initializer())
 
-    def vgg_dropout(input):
-        output = tf.layers.dropout(
-            inputs=input, rate=0.5, training=mode == tf.estimator.ModeKeys.TRAIN)
-        return output
+    # Convolutional Layer #4
+    conv4 = tf.layers.conv2d(
+        inputs=conv3,
+        filters=384,
+        kernel_size=[3, 3],
+        padding="same",
+        kernel_initializer=tf.random_normal_initializer(0, 0.01),
+        bias_initializer=tf.zeros_initializer())
 
-    # conv block 1
-    conv1_1 = vgg_conv(input_layer, 64)
-    conv1_2 = vgg_conv(conv1_1, 64)
-    pool1 = vgg_maxpool(conv1_2)
+    # Convolutional Layer #5 and Max pooling #3
+    conv5 = tf.layers.conv2d(
+        inputs=conv4,
+        filters=256,
+        kernel_size=[3, 3],
+        padding="same",
+        kernel_initializer=tf.random_normal_initializer(0, 0.01),
+        bias_initializer=tf.zeros_initializer())
+    pool3 = tf.layers.max_pooling2d(inputs=conv5, pool_size=[3, 3], strides=2)
 
-    # conv block 2
-    conv2_1 = vgg_conv(pool1, 128)
-    conv2_2 = vgg_conv(conv2_1, 128)
-    pool2 = vgg_maxpool(conv2_2)
+    # print(pool3.shape)
+    # Dense Layer #1 and drop out #1
+    pool3_flat = tf.reshape(pool3, [-1, 256 * 5 * 5])
+    dense1 = tf.layers.dense(inputs=pool3_flat, units=4096,
+                            activation=tf.nn.relu,
+                            kernel_initializer=tf.random_normal_initializer(0, 0.005),
+                            bias_initializer=tf.zeros_initializer())
+    dropout1 = tf.layers.dropout(
+        inputs=dense1, rate=0.5, training=mode == tf.estimator.ModeKeys.TRAIN)
 
-    # conv block 3
-    conv3_1 = vgg_conv(pool2, 256)
-    conv3_2 = vgg_conv(conv3_1, 256)
-    conv3_3 = vgg_conv(conv3_2, 256)
-    pool3 = vgg_maxpool(conv3_3)
-
-    # conv block 4
-    conv4_1 = vgg_conv(pool3, 512)
-    conv4_2 = vgg_conv(conv4_1, 512)
-    conv4_3 = vgg_conv(conv4_2, 512)
-    pool4 = vgg_maxpool(conv4_3)
-
-    # conv block 5
-    conv5_1 = vgg_conv(pool4, 512)
-    conv5_2 = vgg_conv(conv5_1, 512)
-    conv5_3 = vgg_conv(conv5_2, 512)
-    pool5 = vgg_maxpool(conv5_3)
-
-    # dense
-    pool5_flat = tf.reshape(pool5, [-1, 512 * 7 * 7])
-    dense1 = vgg_dense(pool5_flat, 4096, 0.005)
-    dropout1 = vgg_dropout(dense1)
-
-    dense2 = vgg_dense(dropout1, 4096, 0.005)
-    dropout2 = vgg_dropout(dense2)
+    dense2 = tf.layers.dense(inputs=dropout1, units=4096,
+                            activation=tf.nn.relu,
+                            kernel_initializer=tf.random_normal_initializer(0, 0.005),
+                            bias_initializer=tf.zeros_initializer())
+    dropout2 = tf.layers.dropout(
+        inputs=dense2, rate=0.5, training=mode == tf.estimator.ModeKeys.TRAIN)
 
     # Logits Layer
-    logits = vgg_dense(dropout2, 20, 0.01)
+    logits = tf.layers.dense(inputs=dropout2, units=20,
+                            kernel_initializer=tf.random_normal_initializer(0, 0.01),
+                            bias_initializer=tf.zeros_initializer())
 
     predictions = {
         # Generate predictions (for PREDICT and EVAL mode)
@@ -163,7 +172,7 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
         # `logging_hook`.
         "probabilities": tf.nn.sigmoid(logits, name="sigmoid_tensor")
     }
-    
+
     if mode == tf.estimator.ModeKeys.PREDICT:
         return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
@@ -175,24 +184,11 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
     if mode == tf.estimator.ModeKeys.TRAIN:
         lr = tf.train.exponential_decay(0.001, tf.train.get_global_step(), 10000, 0.5)
         optimizer = tf.train.MomentumOptimizer(learning_rate=lr, momentum=0.9)
-
-        grads_and_vars = optimizer.compute_gradients(loss)
-
-        tf.summary.scalar("learning rate", lr)
-        tf.summary.image("input image", input_layer[:3,:,:,:])
-        for g, v in grads_and_vars:
-            if g is not None:
-                tf.summary.histogram("{}/grad_histogram".format(v.name), g)
-        
-        # summary_hook = tf.train.SummarySaverHook(display, summary_op=tf.summary.merge_all())
-
         train_op = optimizer.minimize(
             loss=loss,
             global_step=tf.train.get_global_step())
         return tf.estimator.EstimatorSpec(
             mode=mode, loss=loss, train_op=train_op)
-        # return tf.estimator.EstimatorSpec(
-        #     mode=mode, loss=loss, train_op=train_op, training_hooks=[summary_hook])
 
     # Add evaluation metrics (for EVAL mode)
     eval_metric_ops = {
@@ -256,7 +252,6 @@ def load_pascal(data_dir, split='train'):
         if count % 1000 == 1:
             print(count)
 
-
     print("finish loading images")
     img_list = img_list.astype(np.float32)
     img_list /= 255.0
@@ -286,14 +281,12 @@ def load_pascal(data_dir, split='train'):
                 weight_list[img_pos, cls_pos] = 1
             img_pos += 1
         cls_pos += 1
-
     print("finish loading label")
 
     img_list = img_list.astype(np.float32)
     label_list = label_list.astype(np.int32)
     weight_list = weight_list.astype(np.int32)
     return img_list, label_list, weight_list
-    
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -314,25 +307,71 @@ def _get_el(arr, i):
     except IndexError:
         return arr
 
+def visualize_filters(kernels, step, pad=1):
+    # shape of kernels: [size, size, channel, num_filters]
+    col = 12
+    row = 8
+
+    x_min = tf.reduce_min(kernels)
+    x_max = tf.reduce_max(kernels)
+    kernels = (kernels - x_min) / (x_max - x_min)
+    kernels = tf.pad(kernels, tf.constant([[pad,pad],[pad, pad],[0,0],[0,0]]), mode='CONSTANT')
+    block_c = kernels.get_shape()[0].value + 2 * pad
+    block_r = kernels.get_shape()[1].value + 2 * pad
+    channel = kernels.get_shape()[2].value
+    num_filters = kernels.get_shape()[3].value
+
+    kernels = tf.transpose(kernels, (3, 0, 1, 2))
+    finish = False
+    for i in xrange(row):
+        for j in xrange(col):
+            n = i * col + j
+            if n >= num_filters:
+                finish = True
+                break
+            if j == 0:
+                conv_row = kernels[n]
+            else:
+                conv_row = tf.concat([conv_row, kernels[n]], 0)
+                # print(conv_row.shape)
+        if finish == True:
+            break
+        if i == 0:
+            conv_img = conv_row
+        else:
+            conv_img = tf.concat([conv_img, conv_row], 1)
+            # print(conv_img.shape)
+
+    sess = tf.Session()
+    with sess.as_default():
+        conv_img_np = conv_img.eval()
+
+    conv_img_np *= 255
+    conv_img_np = conv_img_np.astype(np.uint8)
+    print(conv_img_np.shape)
+    img_name = 'task5_alexnet_conv1_filters_' + str(step) + '.jpg'
+    sci.imsave(img_name, conv_img_np)
+
 
 def main():
     args = parse_args()
-
     # Load training and eval data
     train_data, train_labels, train_weights = load_pascal(
         args.data_dir, split='trainval')
     eval_data, eval_labels, eval_weights = load_pascal(
         args.data_dir, split='test')
 
+    checkpoint_config = tf.estimator.RunConfig(save_checkpoints_steps=10000, 
+                                            keep_checkpoint_max=3)
+
     pascal_classifier = tf.estimator.Estimator(
         model_fn=partial(cnn_model_fn,
-        num_classes=train_labels.shape[1]),
-        model_dir=MODEL_PATH)
-
+                         num_classes=train_labels.shape[1]),
+        model_dir="pascal_model_alexnet",
+        config=checkpoint_config)
     tensors_to_log = {"loss": "loss"}
     logging_hook = tf.train.LoggingTensorHook(
         tensors=tensors_to_log, every_n_iter=100)
-
     # Train the model
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": train_data, "w": train_weights},
@@ -346,45 +385,42 @@ def main():
         y=eval_labels,
         num_epochs=1,
         shuffle=False)
-    
 
     map_list = []
     step_list = []
-    for step in xrange(0, max_step, stride):
+    for step in xrange(0, max_step+1, stride):
         pascal_classifier.train(
             input_fn=train_input_fn,
             steps=stride,
             hooks=[logging_hook])
-        print("evaluate")
-        # eval_results = pascal_classifier.evaluate(input_fn=eval_input_fn)
 
-        pred = list(pascal_classifier.predict(input_fn=eval_input_fn))
-        pred = np.stack([p['probabilities'] for p in pred])
-        rand_AP = compute_map(
-            eval_labels, np.random.random(eval_labels.shape),
-            eval_weights, average=None)
-        print('Random AP: {} mAP'.format(np.mean(rand_AP)))
-        gt_AP = compute_map(
-            eval_labels, eval_labels, eval_weights, average=None)
-        print('GT AP: {} mAP'.format(np.mean(gt_AP)))
-        AP = compute_map(eval_labels, pred, eval_weights, average=None)
-        print('Obtained {} mAP'.format(np.mean(AP)))
-        print('per class:')
-        for cid, cname in enumerate(CLASS_NAMES):
-            print('{}: {}'.format(cname, _get_el(AP, cid)))
+        print("conv1 filters")
+        # print(pascal_classifier.get_variable_names())
+        kernels = pascal_classifier.get_variable_value('conv2d/kernel')
+        visualize_filters(kernels, step)
 
-        map_list.append(np.mean(AP))
-        step_list.append(step)
-        if step % 10000 == 0:
-            fig = plt.figure()
-            plt.plot(step_list, map_list)
-            plt.title("mAP")
-            fig.savefig("task3_mAP_plot.jpg")
+    
+    print("evaluate")
+    pred = list(pascal_classifier.predict(input_fn=eval_input_fn))
+    pred = np.stack([p['probabilities'] for p in pred])
+    rand_AP = compute_map(
+        eval_labels, np.random.random(eval_labels.shape),
+        eval_weights, average=None)
+    print('Random AP: {} mAP'.format(np.mean(rand_AP)))
+    gt_AP = compute_map(
+        eval_labels, eval_labels, eval_weights, average=None)
+    print('GT AP: {} mAP'.format(np.mean(gt_AP)))
+    AP = compute_map(eval_labels, pred, eval_weights, average=None)
+    print('Obtained {} mAP'.format(np.mean(AP)))
+    print('per class:')
+    for cid, cname in enumerate(CLASS_NAMES):
+        print('{}: {}'.format(cname, _get_el(AP, cid)))
 
     fig = plt.figure()
     plt.plot(step_list, map_list)
     plt.title("mAP")
-    fig.savefig("task3_mAP_plot.jpg")
+    fig.savefig("task2_mAP_plot_2.jpg")
+
 
 
 if __name__ == "__main__":
