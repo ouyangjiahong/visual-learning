@@ -21,7 +21,6 @@ import os
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
-
 from eval import compute_map
 tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -51,7 +50,7 @@ CLASS_NAMES = [
 BATCH_SIZE = 10
 IMAGE_SIZE = 256
 IMAGE_CROP_SIZE = 224
-MODEL_PATH = "pascal_model_alexnet"
+MODEL_PATH = "pascal_model_vgg16_finetune"
 
 
 def cnn_model_fn(features, labels, mode, num_classes=20):
@@ -64,8 +63,8 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
     def data_augmentation(inputs):
         for i in xrange(BATCH_SIZE):
             output = tf.image.random_flip_left_right(inputs[i])
-            output = tf.image.random_contrast(output, 0.9, 1.1)
-            output += tf.random_normal([IMAGE_SIZE, IMAGE_SIZE, 3], 0, 0.1)
+            # output = tf.image.random_contrast(output, 0.95, 1.05)
+            # output += tf.random_normal([IMAGE_SIZE, IMAGE_SIZE, 3], 0, 0.1)
             output = tf.random_crop(output, [IMAGE_CROP_SIZE, IMAGE_CROP_SIZE, 3])
             output = tf.expand_dims(output, 0)
             if i == 0:
@@ -74,99 +73,210 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
                 outputs = tf.concat([outputs, output], 0)
         return outputs
 
-    # def center_crop(inputs, size):
-    #     print(size)
-    #     ratio = IMAGE_CROP_SIZE / float(IMAGE_SIZE)
-    #     for i in xrange(size):
-    #         output = tf.image.central_crop(inputs[i], ratio)
-    #         output = tf.expand_dims(output, 0)
-    #         if i == 0:
-    #             outputs = output
-    #         else:
-    #             outputs = tf.concat([outputs, output], 0)
-    #     return outputs
-
     #data augmentation
     if mode == tf.estimator.ModeKeys.TRAIN:
         input_layer = data_augmentation(input_layer)
     # else:
     #     input_layer = center_crop(input_layer, test_num)
-    print(input_layer.shape)
 
-    # Convolutional Layer #1
-    conv1 = tf.layers.conv2d(
-        inputs=input_layer,
-        filters=96,
-        kernel_size=[11, 11],
-        strides=[4, 4],
-        padding="valid",
-        activation=tf.nn.relu,
-        kernel_initializer=tf.random_normal_initializer(0, 0.01),
-        bias_initializer=tf.zeros_initializer())
-    # Pooling Layer #1
-    pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=2)
+    #conv layer1
+    conv1_1 = tf.layers.conv2d(
+        inputs= input_layer,
+        filters = 64,
+        strides = 1,
+        kernel_size = [3,3],
+        padding= "same",
+        activation = tf.nn.relu,
+        use_bias = True)
 
-    # Convolutional Layer #2 and Pooling Layer #2
-    conv2 = tf.layers.conv2d(
-        inputs=pool1,
-        filters=256,
-        kernel_size=[5, 5],
-        padding="same",
-        activation=tf.nn.relu,
-        kernel_initializer=tf.random_normal_initializer(0, 0.01),
-        bias_initializer=tf.zeros_initializer())
-    pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2)
+    #conv layer2
+    conv1_2 = tf.layers.conv2d(
+        inputs= conv1_1,
+        filters = 64,
+        strides = 1,
+        kernel_size = [3,3],
+        padding= "same",
+        activation = tf.nn.relu,
+        use_bias = True)
 
-    # Convolutional Layer #3
-    conv3 = tf.layers.conv2d(
-        inputs=pool2,
-        filters=384,
-        kernel_size=[3, 3],
-        padding="same",
-        activation=tf.nn.relu,
-        kernel_initializer=tf.random_normal_initializer(0, 0.01),
-        bias_initializer=tf.zeros_initializer())
+    #pool1
+    pool1 = tf.layers.max_pooling2d(
+        inputs=conv1_2,
+        pool_size =[2,2],
+        strides=2)
+    
+    #conv layer3
+    conv2_1 = tf.layers.conv2d(
+        inputs= pool1,
+        filters = 128,
+        strides = 1,
+        kernel_size = [3,3],
+        padding= "same",
+        activation = tf.nn.relu,
+        use_bias = True)
 
-    # Convolutional Layer #4
-    conv4 = tf.layers.conv2d(
-        inputs=conv3,
-        filters=384,
-        kernel_size=[3, 3],
-        padding="same",
-        kernel_initializer=tf.random_normal_initializer(0, 0.01),
-        bias_initializer=tf.zeros_initializer())
+    #conv layer4
+    conv2_2 = tf.layers.conv2d(
+        inputs=conv2_1 ,
+        filters = 128,
+        strides = 1,
+        kernel_size = [3,3],
+        padding= "same",
+        activation = tf.nn.relu,
+        use_bias = True)
+    
+    #pool2
+    pool2 = tf.layers.max_pooling2d(
+        inputs=conv2_2,
+        pool_size =[2,2],
+        strides=2)
 
-    # Convolutional Layer #5 and Max pooling #3
-    conv5 = tf.layers.conv2d(
-        inputs=conv4,
-        filters=256,
-        kernel_size=[3, 3],
-        padding="same",
-        kernel_initializer=tf.random_normal_initializer(0, 0.01),
-        bias_initializer=tf.zeros_initializer())
-    pool3 = tf.layers.max_pooling2d(inputs=conv5, pool_size=[3, 3], strides=2)
+    #conv layer5
+    conv3_1 = tf.layers.conv2d(
+        inputs= pool2,
+        filters = 256,
+        strides = 1,
+        kernel_size = [3,3],
+        padding= "same",
+        activation = tf.nn.relu,
+        use_bias = True)
+    
+    #conv layer6
+    conv3_2 = tf.layers.conv2d(
+        inputs= conv3_1,
+        filters = 256,
+        strides = 1,
+        kernel_size = [3,3],
+        padding= "same",
+        activation = tf.nn.relu,
+        use_bias = True)
 
-    # print(pool3.shape)
-    # Dense Layer #1 and drop out #1
-    pool3_flat = tf.reshape(pool3, [-1, 256 * 5 * 5])
-    dense1 = tf.layers.dense(inputs=pool3_flat, units=4096,
-                            activation=tf.nn.relu,
-                            kernel_initializer=tf.random_normal_initializer(0, 0.005),
-                            bias_initializer=tf.zeros_initializer())
+    #conv layer7
+    conv3_3 = tf.layers.conv2d(
+        inputs= conv3_2,
+        filters = 256,
+        strides = 1,
+        kernel_size = [3,3],
+        padding= "same",
+        activation = tf.nn.relu,
+        use_bias = True)
+    
+    #pool3
+    pool3 = tf.layers.max_pooling2d(
+        inputs=conv3_3,
+        pool_size =[2,2],
+        strides=2)
+
+    #conv layer8
+    conv4_1 = tf.layers.conv2d(
+        inputs= pool3,
+        filters = 512,
+        strides = 1,
+        kernel_size = [3,3],
+        padding= "same",
+        activation = tf.nn.relu,
+        use_bias = True)
+    
+    #conv layer9
+    conv4_2 = tf.layers.conv2d(
+        inputs= conv4_1,
+        filters = 512,
+        strides = 1,
+        kernel_size = [3,3],
+        padding= "same",
+        activation = tf.nn.relu,
+        use_bias = True)
+
+    #conv layer10
+    conv4_3 = tf.layers.conv2d(
+        inputs= conv4_2,
+        filters = 512,
+        strides = 1,
+        kernel_size = [3,3],
+        padding= "same",
+        activation = tf.nn.relu,
+        use_bias = True)
+    
+    #pool4
+    pool4 = tf.layers.max_pooling2d(
+        inputs=conv4_3,
+        pool_size =[2,2],
+        strides=2)
+
+    #conv layer11
+    conv5_1 = tf.layers.conv2d(
+        inputs= pool4,
+        filters = 512,
+        strides = 1,
+        kernel_size = [3,3],
+        padding= "same",
+        activation = tf.nn.relu,
+        use_bias = True)
+    
+    #conv layer12
+    conv5_2 = tf.layers.conv2d(
+        inputs= conv5_1,
+        filters = 512,
+        strides = 1,
+        kernel_size = [3,3],
+        padding= "same",
+        activation = tf.nn.relu,
+        use_bias = True)
+
+    #conv layer13
+    conv5_3 = tf.layers.conv2d(
+        inputs= conv5_2,
+        filters = 512,
+        strides = 1,
+        kernel_size = [3,3],
+        padding= "same",
+        activation = tf.nn.relu,
+        use_bias = True)
+    
+    #pool5
+    pool5 = tf.layers.max_pooling2d(
+        inputs=conv5_3,
+        pool_size =[2,2],
+        strides=2)
+
+    # fc layer 6
+    dense1 = tf.layers.conv2d(
+        inputs= pool5,
+        filters = 4096,
+        strides = 1,
+        kernel_size = [7,7],
+        padding= "valid",
+        activation = tf.nn.relu,
+        use_bias = True)
+
+    #drropout1
     dropout1 = tf.layers.dropout(
-        inputs=dense1, rate=0.5, training=mode == tf.estimator.ModeKeys.TRAIN)
+        inputs = dense1,
+        rate = 0.5,
+        training = mode== tf.estimator.ModeKeys.TRAIN)
+    
+    # fc layer 7
+    dense2 = tf.layers.conv2d(
+        inputs=  dropout1,
+        filters = 4096,
+        strides = 1,
+        kernel_size = [1,1],
+        padding= "valid",
+        activation = tf.nn.relu,
+        use_bias = True)
 
-    dense2 = tf.layers.dense(inputs=dropout1, units=4096,
-                            activation=tf.nn.relu,
-                            kernel_initializer=tf.random_normal_initializer(0, 0.005),
-                            bias_initializer=tf.zeros_initializer())
-    dropout2 = tf.layers.dropout(
-        inputs=dense2, rate=0.5, training=mode == tf.estimator.ModeKeys.TRAIN)
+    #drropout2
+    dropout2= tf.layers.dropout(
+        inputs = dense2,
+        rate = 0.5,
+        training = mode== tf.estimator.ModeKeys.TRAIN)
 
-    # Logits Layer
-    logits = tf.layers.dense(inputs=dropout2, units=20,
-                            kernel_initializer=tf.random_normal_initializer(0, 0.01),
-                            bias_initializer=tf.zeros_initializer())
+    dense2_flat = tf.reshape(dropout2,[-1,4096])
+    
+    #fc layer 3
+    logits = tf.layers.dense(
+        inputs= dense2_flat,
+        units = 20)
 
     predictions = {
         # Generate predictions (for PREDICT and EVAL mode)
@@ -174,10 +284,10 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
         # Add `softmax_tensor` to the graph. It is used for PREDICT and by the
         # `logging_hook`.
         "probabilities": tf.nn.sigmoid(logits, name="sigmoid_tensor"),
-        "pool5": pool3,
+        "pool5": pool5,
         "fc7": dense2
     }
-
+    
     if mode == tf.estimator.ModeKeys.PREDICT:
         return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
@@ -189,11 +299,24 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
     if mode == tf.estimator.ModeKeys.TRAIN:
         lr = tf.train.exponential_decay(0.001, tf.train.get_global_step(), 10000, 0.5)
         optimizer = tf.train.MomentumOptimizer(learning_rate=lr, momentum=0.9)
+
+        grads_and_vars = optimizer.compute_gradients(loss)
+
+        tf.summary.scalar("learning rate", lr)
+        tf.summary.image("input image", input_layer[:3,:,:,:])
+        for g, v in grads_and_vars:
+            if g is not None:
+                tf.summary.histogram("{}/grad_histogram".format(v.name), g)
+        
+        # summary_hook = tf.train.SummarySaverHook(display, summary_op=tf.summary.merge_all())
+
         train_op = optimizer.minimize(
             loss=loss,
             global_step=tf.train.get_global_step())
         return tf.estimator.EstimatorSpec(
             mode=mode, loss=loss, train_op=train_op)
+        # return tf.estimator.EstimatorSpec(
+        #     mode=mode, loss=loss, train_op=train_op, training_hooks=[summary_hook])
 
     # Add evaluation metrics (for EVAL mode)
     eval_metric_ops = {
@@ -201,6 +324,7 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
             labels=labels, predictions=predictions["classes"])} 
     return tf.estimator.EstimatorSpec(
         mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
+
 
 
 def load_pascal(data_dir, split='train'):
@@ -230,11 +354,11 @@ def load_pascal(data_dir, split='train'):
     first_flag = True
     margin = (IMAGE_SIZE - IMAGE_CROP_SIZE) // 2
 
-    # mean_value = [123, 116, 103]
-    # mean_r = np.tile(np.array(mean_value[0]), (IMAGE_SIZE, IMAGE_SIZE))
-    # mean_g = np.tile(np.array(mean_value[1]), (IMAGE_SIZE, IMAGE_SIZE))
-    # mean_b = np.tile(np.array(mean_value[2]), (IMAGE_SIZE, IMAGE_SIZE))
-    # mean = np.stack((mean_r, mean_g, mean_b), axis=2)
+    mean_value = [123, 116, 103]
+    mean_r = np.tile(np.array(mean_value[0]), (IMAGE_SIZE, IMAGE_SIZE))
+    mean_g = np.tile(np.array(mean_value[1]), (IMAGE_SIZE, IMAGE_SIZE))
+    mean_b = np.tile(np.array(mean_value[2]), (IMAGE_SIZE, IMAGE_SIZE))
+    mean = np.stack((mean_r, mean_g, mean_b), axis=2)
 #     print(mean.shape)
 
     if split != 'test':
@@ -248,7 +372,7 @@ def load_pascal(data_dir, split='train'):
         img_name = img_dir + line + '.jpg'
         img = sci.imread(img_name)
         img = sci.imresize(img, (IMAGE_SIZE, IMAGE_SIZE, 3))
-        # img = np.subtract(img, mean)
+        img = np.subtract(img, mean)
 
         if split == 'test':
             img = img[margin:IMAGE_CROP_SIZE+margin, margin:IMAGE_CROP_SIZE+margin, :]
@@ -258,10 +382,10 @@ def load_pascal(data_dir, split='train'):
             print(count)
 
     print("finish loading images")
-    # img_list = img_list.astype(np.float32)
-    # img_list /= 255.0
-    # img_list -= 0.5
-    # img_list *= 2       
+    img_list = img_list.astype(np.float32)
+    img_list /= 255.0
+    img_list -= 0.5
+    img_list *= 2       
 
     # read labels
     label_list = np.zeros((img_num, 20))
@@ -384,7 +508,8 @@ def showtSNE(pred_eval, eval_labels):
     plt.axis('equal')
     plt.title('tSNE for fc7 features from VGG16')
     plt.show()
-    fig.savefig('task5_tSNE_alexnet_fc7.jpg')
+    fig.savefig("task5_tSNE_vgg16_fc7.jpg")
+    # np.save('task5_tSNE_vgg16_fc7.npy', arr)
 
 
 def main():
