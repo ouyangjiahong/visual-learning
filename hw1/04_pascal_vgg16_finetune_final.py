@@ -87,6 +87,11 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
     #             outputs = tf.concat([outputs, output], 0)
     #     return outputs
 
+    #data augmentation
+    if mode == tf.estimator.ModeKeys.TRAIN:
+        input_layer = data_augmentation(input_layer)
+    # else:
+    #     input_layer = center_crop(input_layer, test_num)
 
     #conv layer1
     conv1_1 = tf.layers.conv2d(
@@ -286,9 +291,6 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
     logits = tf.layers.dense(
         inputs= dense2_flat,
         units = 20)
-    
-
-
 
     predictions = {
         # Generate predictions (for PREDICT and EVAL mode)
@@ -309,20 +311,24 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
     if mode == tf.estimator.ModeKeys.TRAIN:
         lr = tf.train.exponential_decay(0.001, tf.train.get_global_step(), 10000, 0.5)
         optimizer = tf.train.MomentumOptimizer(learning_rate=lr, momentum=0.9)
+
+        grads_and_vars = optimizer.compute_gradients(loss)
+
+        tf.summary.scalar("learning rate", lr)
+        tf.summary.image("input image", input_layer[:3,:,:,:])
+        for g, v in grads_and_vars:
+            if g is not None:
+                tf.summary.histogram("{}/grad_histogram".format(v.name), g)
+        
+        # summary_hook = tf.train.SummarySaverHook(display, summary_op=tf.summary.merge_all())
+
         train_op = optimizer.minimize(
             loss=loss,
             global_step=tf.train.get_global_step())
-
-        tf.summary.scalar("learning rate", lr)
-        # tf.summary.image("input image", input_layer[:3,:,:,:])
-        # for g, v in grads_and_vars:
-        #     if g is not None:
-        #         tf.summary.histogram("{}/grad_histogram".format(v.name), g)
-
-        # summary_hook = tf.train.SummarySaverHook(display, summary_op=tf.summary.merge_all())
-
         return tf.estimator.EstimatorSpec(
             mode=mode, loss=loss, train_op=train_op)
+        # return tf.estimator.EstimatorSpec(
+        #     mode=mode, loss=loss, train_op=train_op, training_hooks=[summary_hook])
 
     # Add evaluation metrics (for EVAL mode)
     eval_metric_ops = {

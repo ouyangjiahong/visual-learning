@@ -212,6 +212,9 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
     if mode == tf.estimator.ModeKeys.TRAIN:
         lr = tf.train.exponential_decay(0.0001, tf.train.get_global_step(), 1000, 0.5)
         optimizer = tf.train.MomentumOptimizer(learning_rate=lr, momentum=0.9)
+        train_op = optimizer.minimize(
+            loss=loss,
+            global_step=tf.train.get_global_step())
 
         tf.summary.scalar("learning rate", lr)
         tf.summary.image("input image", input_layer[:3,:,:,:])
@@ -221,9 +224,6 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
 
         # summary_hook = tf.train.SummarySaverHook(display, summary_op=tf.summary.merge_all())
 
-        train_op = optimizer.minimize(
-            loss=loss,
-            global_step=tf.train.get_global_step())
         return tf.estimator.EstimatorSpec(
             mode=mode, loss=loss, train_op=train_op)
 
@@ -400,8 +400,7 @@ def main():
     #     print(reader.get_tensor(key).shape) 
 
     pascal_classifier = tf.estimator.Estimator(
-        model_fn=partial(cnn_model_fn,
-        num_classes=train_labels.shape[1]),
+        model_fn=partial(cnn_model_fn, num_classes=train_labels.shape[1]),
         model_dir=MODEL_PATH)
 
     tensors_to_log = {"loss": "loss"}

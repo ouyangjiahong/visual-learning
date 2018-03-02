@@ -225,12 +225,12 @@ def load_pascal(data_dir, split='train'):
     first_flag = True
     margin = (IMAGE_SIZE - IMAGE_CROP_SIZE) // 2
 
-    mean_value = [123, 116, 103]
-    mean_r = np.tile(np.array(mean_value[0]), (IMAGE_SIZE, IMAGE_SIZE))
-    mean_g = np.tile(np.array(mean_value[1]), (IMAGE_SIZE, IMAGE_SIZE))
-    mean_b = np.tile(np.array(mean_value[2]), (IMAGE_SIZE, IMAGE_SIZE))
-    mean = np.stack((mean_r, mean_g, mean_b), axis=2)
-    print(mean.shape)
+    # mean_value = [123, 116, 103]
+    # mean_r = np.tile(np.array(mean_value[0]), (IMAGE_SIZE, IMAGE_SIZE))
+    # mean_g = np.tile(np.array(mean_value[1]), (IMAGE_SIZE, IMAGE_SIZE))
+    # mean_b = np.tile(np.array(mean_value[2]), (IMAGE_SIZE, IMAGE_SIZE))
+    # mean = np.stack((mean_r, mean_g, mean_b), axis=2)
+    # print(mean.shape)
 
     if split != 'test':
         img_list = np.zeros((len(lines), IMAGE_SIZE, IMAGE_SIZE, 3))
@@ -243,7 +243,7 @@ def load_pascal(data_dir, split='train'):
         img_name = img_dir + line + '.jpg'
         img = sci.imread(img_name)
         img = sci.imresize(img, (IMAGE_SIZE, IMAGE_SIZE, 3))
-        img = np.subtract(img, mean)
+        # img = np.subtract(img, mean)
 
         if split == 'test':
             img = img[margin:IMAGE_CROP_SIZE+margin, margin:IMAGE_CROP_SIZE+margin, :]
@@ -253,10 +253,10 @@ def load_pascal(data_dir, split='train'):
             print(count)
 
     print("finish loading images")
-    img_list = img_list.astype(np.float32)
-    img_list /= 255.0
-    img_list -= 0.5
-    img_list *= 2       
+    # img_list = img_list.astype(np.float32)
+    # img_list /= 255.0
+    # img_list -= 0.5
+    # img_list *= 2       
 
     # read labels
     label_list = np.zeros((img_num, 20))
