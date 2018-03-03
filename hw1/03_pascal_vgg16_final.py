@@ -60,8 +60,9 @@ def cnn_model_fn(features, labels, mode, num_classes=20):
     def data_augmentation(inputs):
         for i in xrange(BATCH_SIZE):
             output = tf.image.random_flip_left_right(inputs[i])
-            # output = tf.image.random_contrast(output, 0.95, 1.05)
-            # output += tf.random_normal([IMAGE_SIZE, IMAGE_SIZE, 3], 0, 0.1)
+            output = tf.image.random_contrast(output, 0.9, 1.1)
+            output = tf.image.random_brightness(output, 15)
+            output += tf.random_normal([IMAGE_SIZE, IMAGE_SIZE, 3], 0, 0.1)
             output = tf.random_crop(output, [IMAGE_CROP_SIZE, IMAGE_CROP_SIZE, 3])
             output = tf.expand_dims(output, 0)
             if i == 0:
@@ -390,9 +391,9 @@ def load_pascal(data_dir, split='train'):
 
     print("finish loading images")
     img_list = img_list.astype(np.float32)
-    img_list /= 255.0
-    img_list -= 0.5
-    img_list *= 2       
+    # img_list /= 255.0
+    # img_list -= 0.5
+    # img_list *= 2       
 
     # read labels
     label_list = np.zeros((img_num, 20))
@@ -508,7 +509,7 @@ def main():
 
         map_list.append(np.mean(AP))
         step_list.append(step)
-        if step % 10000 == 0:
+        if step % 2000 == 0:
             fig = plt.figure()
             plt.plot(step_list, map_list)
             plt.title("mAP")
