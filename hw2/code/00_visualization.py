@@ -1,8 +1,7 @@
 import os
-import cv2
 import visdom
-#from faster_rcnn.datasets.imdb import imdb
-#import faster_rcnn.datasets.ds_utils as ds_utils
+import _init_paths
+import torch
 import xml.etree.ElementTree as ET
 import numpy as np
 import scipy.sparse
@@ -10,8 +9,8 @@ import scipy.io as sio
 import pickle
 import subprocess
 import uuid
-#from faster_rcnn.fast_rcnn.config import cfg
-from faster_rcnn.datasets.factory import get_imdb
+from datasets.factory import get_imdb
+import cv2
 
 vis = visdom.Visdom(server='http://address.com', port='8097')
 
@@ -21,23 +20,39 @@ print(len(roidb))
 
 idx = 2018
 roi = roidb[idx]
-#print(roidb)
+
+# gt box
 print("gt box")
-#print(len(roi['boxes']))
 gt_box = roi['boxes'][0]
 print(gt_box)
+
+# ss boxes
+scores = roi['boxscores']
+# print(score)
+scores = np.squeeze(scores)
+scores = scores[scores.shape[0]//2:]
+print(scores.shape)
+idx = np.argsort(scores)
+idx = idx[::-1]
+print(idx.shape)
+# print(idx[0:10])
 print("ss boxes")
-ss_box = roi['boxes'][1:11]
+print(roi['boxes'].shape)
+ss_box = roi['boxes'][idx[0:10]]
 print(ss_box)
 
 img_path = 'data/VOCdevkit2007/VOC2007/JPEGImages/003998.jpg'
 img_gt = cv2.imread(img_path)
 cv2.rectangle(img_gt,(gt_box[0], gt_box[1]),(gt_box[2], gt_box[3]), (0,255,0),2)
+cv2.putText(img_gt, '%s' % (roi['gt_classes'][0]), (gt_box[0], gt_box[1] + 15), cv2.FONT_HERSHEY_PLAIN,
+                        1.0, (0, 255, 0), thickness=1)
 cv2.imwrite('2008.jpg', img_gt)
 
 img_ss = cv2.imread(img_path)
 for i in xrange(10):
     cv2.rectangle(img_ss, (ss_box[i][0],ss_box[i][1]),(ss_box[i][2],ss_box[i][3]),(0,0,255),2)
+    cv2.putText(img_ss, '%.3f' % (scores[idx[i]]), (ss_box[i][0], ss_box[i][1] + 15), cv2.FONT_HERSHEY_PLAIN,
+                        1.0, (0, 0, 255), thickness=1)
 cv2.imwrite('2008_ss.jpg', img_ss)
 
 img_gt = img_gt.transpose(2,0,1)

@@ -1,9 +1,10 @@
-import cv2
+#import cv2
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+import cv2
 
 from utils.timer import Timer
 from utils.blob import im_list_to_blob

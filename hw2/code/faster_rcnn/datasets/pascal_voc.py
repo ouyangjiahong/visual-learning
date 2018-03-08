@@ -10,17 +10,17 @@ from __future__ import print_function
 
 import os
 from .imdb import imdb
-from . import ds_utils
+import datasets.ds_utils as ds_utils
 import xml.etree.ElementTree as ET
 import numpy as np
 import scipy.sparse
 import scipy.io as sio
-from ..utils import cython_bbox
+import utils.cython_bbox
 import pickle
 import subprocess
 import uuid
 from .voc_eval import voc_eval
-from ..fast_rcnn.config import cfg
+from fast_rcnn.config import cfg
 
 #from myutils import keyboard
 
@@ -109,6 +109,7 @@ class pascal_voc(imdb):
         except:
           roidb = pickle.load(fid, encoding='bytes')
       print('{} gt roidb loaded from {}'.format(self.name, cache_file))
+      # print(roidb[2018])
       return roidb
 
     gt_roidb = [self._load_pascal_annotation(index)

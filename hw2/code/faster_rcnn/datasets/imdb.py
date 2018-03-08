@@ -11,10 +11,10 @@ from __future__ import print_function
 import os
 import os.path as osp
 import PIL
-from ..utils.cython_bbox import bbox_overlaps
+from utils.cython_bbox import bbox_overlaps
 import numpy as np
 import scipy.sparse
-from ..fast_rcnn.config import cfg
+from fast_rcnn.config import cfg
 
 
 class imdb(object):
@@ -254,6 +254,11 @@ class imdb(object):
     for i in range(len(a)):
       a[i]['boxes'] = np.vstack((a[i]['boxes'], b[i]['boxes']))
       a[i]['boxscores'] = np.vstack((np.zeros((a[i]['boxes'].shape[0],1)), b[i]['boxscores'][:,np.newaxis]))
+      # if i==2018:
+      #   print('a shape')
+      #   print(a[i]['boxes'].shape)
+      #   print(b[i]['boxscores'].shape)
+
       a[i]['gt_vec'] = b[i]['gt_vec'][:,np.newaxis]
       a[i]['gt_classes'] = np.hstack((a[i]['gt_classes'],
                                       b[i]['gt_classes']))
