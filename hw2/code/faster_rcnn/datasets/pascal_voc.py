@@ -10,19 +10,19 @@ from __future__ import print_function
 
 import os
 from .imdb import imdb
-import datasets.ds_utils as ds_utils
+from . import ds_utils
 import xml.etree.ElementTree as ET
 import numpy as np
 import scipy.sparse
 import scipy.io as sio
-import utils.cython_bbox
+from ..utils import cython_bbox
 import pickle
 import subprocess
 import uuid
 from .voc_eval import voc_eval
-from fast_rcnn.config import cfg
+from ..fast_rcnn.config import cfg
 
-from myutils import keyboard
+#from myutils import keyboard
 
 
 class pascal_voc(imdb):

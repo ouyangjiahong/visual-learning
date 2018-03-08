@@ -5,8 +5,8 @@
 # Written by Ross Girshick
 # --------------------------------------------------------
 
-from nms.cpu_nms import cpu_nms
-from nms.gpu_nms import gpu_nms
+from ..nms.cpu_nms import cpu_nms
+from ..nms.gpu_nms import gpu_nms
 # from ..nms import cpu_nms
 # from ..nms import gpu_nms
 from .config import cfg
