@@ -9,7 +9,7 @@ from PIL import Image
 import os
 import os.path
 import numpy as np
-from myutils import *
+# from myutils import *
 
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm']
 
@@ -33,7 +33,7 @@ def find_classes(imdb):
 
 
 
-
+    pass
     return classes, class_to_idx
 
 
@@ -44,7 +44,7 @@ def make_dataset(imdb, class_to_idx):
 
 
 
-
+    pass
     return images
 
 
@@ -77,17 +77,33 @@ class LocalizerAlexNet(nn.Module):
     def __init__(self, num_classes=20):
         super(LocalizerAlexNet, self).__init__()
         #TODO: Define model
-
-
-
+        # Conv2d(in_cha, out_cha, kernel_size, strides, padding)
+        # MaxPool2d(kernel_size, strides, padding, dilation)
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, (11, 11), (4, 4), (2, 2)),
+            nn.ReLU(),
+            nn.MaxPool2d((3, 3), (2, 2), dilation=(1, 1), ceil_mode=False),
+            nn.Conv2d(64, 192, (5, 5), (1, 1), (2, 2)),
+            nn.ReLU(),
+            nn.MaxPool2d((3, 3), (2, 2), dilation=(1, 1), ceil_mode=False),
+            nn.Conv2d(192, 384, (3, 3), (1, 1), (1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(384, 256, (3, 3), (1, 1), (1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, (3, 3), (1, 1), (1, 1)),
+            nn.ReLU())
+        self.classifier = nn.Sequential(
+            nn.Conv2d(256, 256, (3, 3), (1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, (3, 3), (1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(256, 20, (1, 1), (1, 1)))
 
 
     def forward(self, x):
         #TODO: Define forward pass
-
-
-
-
+        x = self.features(x)
+        x = self.classifier(x)
         return x
 
 
@@ -134,16 +150,12 @@ def localizer_alexnet_robust(pretrained=False, **kwargs):
     """
     model = LocalizerAlexNetRobust(**kwargs)
     #TODO: Ignore for now until instructed
-
-
-
-
-
+    if pretrained == True:
+        # model.load_state_dict(model_zoo.load_url(model_urls['alexnet']))
+        alexnet_model = models.__dict__['alexnet'](pretrained=True)
+        model.features = alexnet_model.features
 
     return model
-
-
-
 
 
 class IMDBDataset(data.Dataset):

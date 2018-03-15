@@ -3,7 +3,8 @@ import os
 import shutil
 import time
 import sys
-sys.path.insert(0,'/home/spurushw/reps/hw-wsddn-sol/faster_rcnn')
+# sys.path.insert(0,'/home/spurushw/reps/hw-wsddn-sol/faster_rcnn')
+sys.path.insert(0, '../faster_rcnn')
 import sklearn
 import sklearn.metrics
 
