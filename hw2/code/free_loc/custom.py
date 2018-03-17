@@ -1,6 +1,7 @@
 import torch.utils.data as data
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
+import torchvision.models as models
 model_urls = {
         'alexnet': 'https://download.pytorch.org/models/alexnet-owt-4df8aa71.pth',
 }
@@ -30,21 +31,20 @@ def is_image_file(filename):
 def find_classes(imdb):
     #TODO: classes: list of classes
     #TODO: class_to_idx: dictionary with keys=classes and values=class index
-
-
-
-    pass
+    classes = imdb._classes
+    class_to_idx= imdb._class_to_ind
     return classes, class_to_idx
 
 
 def make_dataset(imdb, class_to_idx):
     #TODO: return list of (image path, list(+ve class indices)) tuples
     #You will be using this in IMDBDataset
-
-
-
-
-    pass
+    num_images = imdb.num_images
+    path_list = [imdb.image_path_at(i) for i in range(num_images)]
+    roidb = imdb.gt_roidb()
+    # in pascal_voc, gt_classes=cls_to_idx=1
+    gt_cls_list = [list(set(roidb[i]['gt_classes']-1)) for i in range(num_images)]
+    images = zip(path_list, gt_cls_list)
     return images
 
 
@@ -107,8 +107,6 @@ class LocalizerAlexNet(nn.Module):
         return x
 
 
-
-
 class LocalizerAlexNetRobust(nn.Module):
     def __init__(self, num_classes=20):
         super(LocalizerAlexNetHighres, self).__init__()
@@ -134,11 +132,17 @@ def localizer_alexnet(pretrained=False, **kwargs):
     model = LocalizerAlexNet(**kwargs)
     #TODO: Initialize weights correctly based on whether it is pretrained or
     #not
+    if pretrained == True:
+        pretrained_state = model_zoo.load_url(model_urls['alexnet'].replace('https://', 'http://'))
+        pretrained_state = {k: v for k, v in pretrained_state.items() if k.split('.')[0] == 'features'}
+        print(pretrained_state.keys())
+        model_state = model.state_dict()
+        model_state.update(pretrained_state)
+        print(model.state_dict().keys())
+        model.load_state_dict(model_state)
 
-
-
-
-
+        # alexnet_model = models.__dict__['alexnet'](pretrained=True)
+        # model.features = alexnet_model.features
     return model
 
 def localizer_alexnet_robust(pretrained=False, **kwargs):
@@ -199,11 +203,10 @@ class IMDBDataset(data.Dataset):
                                    (it can be a numpy array)
         """
         # TODO: Write the rest of this function
-
-
-
-
-
+        path, cls = self.imgs[index]
+        img = self.loader(path)
+        target = np.zeros((len(self.classes)))
+        target[cls] = 1
 
         if self.transform is not None:
             img = self.transform(img)

@@ -83,9 +83,10 @@ def main():
 
     # TODO:
     # define loss function (criterion) and optimizer
-
-
-
+    criterion = nn.BCEWithLogitsLoss().cuda()
+    optimizer = torch.optim.SGD(model.parameters(), args.lr,
+                               momentum=args.momentum,
+                               weight_decay=args.weight_decay)
 
 
     # optionally resume from a checkpoint
@@ -108,6 +109,7 @@ def main():
     # TODO: Write code for IMDBDataset in custom.py
     trainval_imdb = get_imdb('voc_2007_trainval')
     test_imdb = get_imdb('voc_2007_test')
+    num_cls = trainval_imdb.num_classes
 
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
@@ -134,7 +136,7 @@ def main():
         num_workers=args.workers, pin_memory=True)
 
     if args.evaluate:
-        validate(val_loader, model, criterion)
+        validate(val_loader, num_cls, model, criterion)
         return
 
     # TODO: Create loggers for visdom and tboard
@@ -152,7 +154,7 @@ def main():
         adjust_learning_rate(optimizer, epoch)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch)
+        train(train_loader, num_cls, model, criterion, optimizer, epoch)
 
         # evaluate on validation set
         if epoch%args.eval_freq==0 or epoch==args.epochs-1:
@@ -171,7 +173,7 @@ def main():
 
 
 #TODO: You can add input arguments if you wish
-def train(train_loader, model, criterion, optimizer, epoch):
+def train(train_loader, num_cls, model, criterion, optimizer, epoch):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -194,7 +196,26 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # TODO: Perform any necessary functions on the output
         # TODO: Compute loss using ``criterion``
         # compute output
+        bs = input.size(0)
+        output = model(input_var)
+        n, m = output.size(2), output.size(3)
+        print(output.max())
+        imoutput = F.max_pool2d(output, kernel_size=(n,m))
+        imoutput = torch.squeeze(imoutput)
+        # print(imoutput.size())
 
+        # compute loss
+        # print(imoutput.size())
+        # print(target_var.size())
+        for i in range(num_cls):
+            # print(imoutput[:,i])
+            # print(target_var[:,i])
+            if i == 0:
+                loss = criterion(imoutput[:,i], target_var[:,i])
+                # print(loss)
+            else:
+                loss = torch.add(loss, criterion(imoutput[:,i], target_var[:,i]))
+                # print(loss)
 
 
 
@@ -204,18 +225,18 @@ def train(train_loader, model, criterion, optimizer, epoch):
         losses.update(loss.data[0], input.size(0))
         avg_m1.update(m1[0], input.size(0))
         avg_m2.update(m2[0], input.size(0))
-        
-        # TODO: 
+
+        # TODO:
         # compute gradient and do SGD step
-
-
-
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
 
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
-        
+
         if i % args.print_freq == 0:
             print('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
@@ -229,9 +250,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         #TODO: Visualize things as mentioned in handout
         #TODO: Visualize at appropriate intervals
-        
 
-def validate(val_loader, model, criterion):
+
+def validate(val_loader, num_cls, model, criterion):
     batch_time = AverageMeter()
     losses = AverageMeter()
     avg_m1 = AverageMeter()
@@ -251,7 +272,20 @@ def validate(val_loader, model, criterion):
         # TODO: Perform any necessary functions on the output
         # TODO: Compute loss using ``criterion``
         # compute output
+        bs = input.size(0)
+        output = model(input_var)
+        output_pool = torch.zeros(bs, num_cls)    # output of maxpooling
+        for i in range(bs):
+            tmp = output[i]
+            print(tmp.shape)#should be K*n*m?
+            for j in range(num_cls):
+                output_pool[i][j] = tmp[j].max()
+        imoutput = output_pool
 
+        # compute loss
+        loss = 0
+        for i in range(num_cls):
+            loss += criterion(output_pool[:,i], target[:,i])
 
 
 
