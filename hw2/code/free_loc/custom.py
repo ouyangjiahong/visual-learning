@@ -146,7 +146,10 @@ def localizer_alexnet_robust(pretrained=False, **kwargs):
     """
     model = LocalizerAlexNetRobust(**kwargs)
     #TODO: Ignore for now until instructed
-
+    if pretrained == True:
+        # model.load_state_dict(model_zoo.load_url(model_urls['alexnet']))
+        alexnet_model = models.__dict__['alexnet'](pretrained=True)
+        model.features = alexnet_model.features
 
     return model
 
