@@ -9,7 +9,7 @@ from PIL import Image
 import os
 import os.path
 import numpy as np
-from myutils import *
+# from myutils import *
 
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm']
 
@@ -30,21 +30,20 @@ def is_image_file(filename):
 def find_classes(imdb):
     #TODO: classes: list of classes
     #TODO: class_to_idx: dictionary with keys=classes and values=class index
-
-
-
-
+    classes = imdb._classes
+    class_to_idx= imdb._class_to_ind
     return classes, class_to_idx
 
 
 def make_dataset(imdb, class_to_idx):
     #TODO: return list of (image path, list(+ve class indices)) tuples
     #You will be using this in IMDBDataset
-
-
-
-
-
+    num_images = imdb.num_images
+    path_list = [imdb.image_path_at(i) for i in range(num_images)]
+    roidb = imdb.gt_roidb()
+    # in pascal_voc, gt_classes=cls_to_idx=1
+    gt_cls_list = [list(set(roidb[i]['gt_classes']-1)) for i in range(num_images)]
+    images = zip(path_list, gt_cls_list)
     return images
 
 
@@ -77,20 +76,34 @@ class LocalizerAlexNet(nn.Module):
     def __init__(self, num_classes=20):
         super(LocalizerAlexNet, self).__init__()
         #TODO: Define model
-
-
-
+        # Conv2d(in_cha, out_cha, kernel_size, strides, padding)
+        # MaxPool2d(kernel_size, strides, padding, dilation)
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, (11, 11), (4, 4), (2, 2)),
+            nn.ReLU(),
+            nn.MaxPool2d((3, 3), (2, 2), dilation=(1, 1), ceil_mode=False),
+            nn.Conv2d(64, 192, (5, 5), (1, 1), (2, 2)),
+            nn.ReLU(),
+            nn.MaxPool2d((3, 3), (2, 2), dilation=(1, 1), ceil_mode=False),
+            nn.Conv2d(192, 384, (3, 3), (1, 1), (1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(384, 256, (3, 3), (1, 1), (1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, (3, 3), (1, 1), (1, 1)),
+            nn.ReLU())
+        self.classifier = nn.Sequential(
+            nn.Conv2d(256, 256, (3, 3), (1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, (3, 3), (1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(256, 20, (1, 1), (1, 1)))
 
 
     def forward(self, x):
         #TODO: Define forward pass
-
-
-
-
+        x = self.features(x)
+        x = self.classifier(x)
         return x
-
-
 
 
 class LocalizerAlexNetRobust(nn.Module):
@@ -118,11 +131,10 @@ def localizer_alexnet(pretrained=False, **kwargs):
     model = LocalizerAlexNet(**kwargs)
     #TODO: Initialize weights correctly based on whether it is pretrained or
     #not
-
-
-
-
-
+    if pretrained == True:
+        # model.load_state_dict(model_zoo.load_url(model_urls['alexnet']))
+        alexnet_model = models.__dict__['alexnet'](pretrained=True)
+        model.features = alexnet_model.features
     return model
 
 def localizer_alexnet_robust(pretrained=False, **kwargs):
@@ -136,14 +148,7 @@ def localizer_alexnet_robust(pretrained=False, **kwargs):
     #TODO: Ignore for now until instructed
 
 
-
-
-
-
     return model
-
-
-
 
 
 class IMDBDataset(data.Dataset):
@@ -187,11 +192,10 @@ class IMDBDataset(data.Dataset):
                                    (it can be a numpy array)
         """
         # TODO: Write the rest of this function
-
-
-
-
-
+        path, cls = self.imgs[index]
+        img = self.loader(path)
+        target = -np.ones((len(self.classes)))
+        target[cls] = 1
 
         if self.transform is not None:
             img = self.transform(img)
