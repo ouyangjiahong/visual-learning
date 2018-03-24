@@ -1,6 +1,7 @@
 import torch.utils.data as data
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
+import torchvision.models as models
 model_urls = {
         'alexnet': 'https://download.pytorch.org/models/alexnet-owt-4df8aa71.pth',
 }
@@ -132,9 +133,13 @@ def localizer_alexnet(pretrained=False, **kwargs):
     #TODO: Initialize weights correctly based on whether it is pretrained or
     #not
     if pretrained == True:
-        # model.load_state_dict(model_zoo.load_url(model_urls['alexnet']))
-        alexnet_model = models.__dict__['alexnet'](pretrained=True)
-        model.features = alexnet_model.features
+        pretrained_state = model_zoo.load_url(model_urls['alexnet'].replace('https://', 'http://'))
+        pretrained_state = {k: v for k, v in pretrained_state.items() if k.split('.')[0] == 'features'}
+        model_state = model.state_dict()
+        model_state.update(pretrained_state)
+        model.load_state_dict(model_state)
+        # alexnet_model = models.__dict__['alexnet'](pretrained=True)
+        # model.features = alexnet_model.features
     return model
 
 def localizer_alexnet_robust(pretrained=False, **kwargs):
@@ -197,7 +202,7 @@ class IMDBDataset(data.Dataset):
         # TODO: Write the rest of this function
         path, cls = self.imgs[index]
         img = self.loader(path)
-        target = -np.ones((len(self.classes)))
+        target = np.zeros((len(self.classes)))
         target[cls] = 1
 
         if self.transform is not None:

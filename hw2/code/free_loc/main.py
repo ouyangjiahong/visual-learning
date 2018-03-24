@@ -83,7 +83,7 @@ def main():
 
     # TODO:
     # define loss function (criterion) and optimizer
-    criterion = nn.BCELoss().cuda()
+    criterion = nn.BCEWithLogitsLoss().cuda()
     optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                momentum=args.momentum,
                                weight_decay=args.weight_decay)
@@ -198,19 +198,25 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch):
         # compute output
         bs = input.size(0)
         output = model(input_var)
-        output_pool = torch.zeros(bs, num_cls)    # output of maxpooling
-        for i in range(bs):
-            tmp = output[i].data
-            # print(tmp.shape)#should be K*n*m
-            for j in range(num_cls):
-                # print(torch.max(tmp[j]))
-                output_pool[i][j] = torch.max(tmp[j])
-        imoutput = torch.autograd.Variable(output_pool, requires_grad=True)
+        n, m = output.size(2), output.size(3)
+        print(output.max())
+        imoutput = F.max_pool2d(output, kernel_size=(n,m))
+        imoutput = torch.squeeze(imoutput)
+        # print(imoutput.size())
 
         # compute loss
-        loss = 0
+        # print(imoutput.size())
+        # print(target_var.size())
         for i in range(num_cls):
-            loss += criterion(imoutput[:,i], target[:,i])
+            # print(imoutput[:,i])
+            # print(target_var[:,i])
+            if i == 0:
+                loss = criterion(imoutput[:,i], target_var[:,i])
+                # print(loss)
+            else:
+                loss = torch.add(loss, criterion(imoutput[:,i], target_var[:,i]))
+                # print(loss)
+
 
 
         # measure metrics and record loss
