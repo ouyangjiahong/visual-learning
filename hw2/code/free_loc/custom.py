@@ -135,9 +135,18 @@ def localizer_alexnet(pretrained=False, **kwargs):
     if pretrained == True:
         pretrained_state = model_zoo.load_url(model_urls['alexnet'].replace('https://', 'http://'))
         pretrained_state = {k: v for k, v in pretrained_state.items() if k.split('.')[0] == 'features'}
+<<<<<<< HEAD
         model_state = model.state_dict()
         model_state.update(pretrained_state)
         model.load_state_dict(model_state)
+=======
+        print(pretrained_state.keys())
+        model_state = model.state_dict()
+        model_state.update(pretrained_state)
+        print(model.state_dict().keys())
+        model.load_state_dict(model_state)
+
+>>>>>>> 563f81203ac7a2ad2b13d40c44853efbe5d4e493
         # alexnet_model = models.__dict__['alexnet'](pretrained=True)
         # model.features = alexnet_model.features
     return model
