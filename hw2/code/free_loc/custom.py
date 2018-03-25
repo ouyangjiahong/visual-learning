@@ -95,9 +95,12 @@ class LocalizerAlexNet(nn.Module):
         self.classifier = nn.Sequential(
             nn.Conv2d(256, 256, (3, 3), (1, 1)),
             nn.ReLU(),
-            nn.Conv2d(256, 256, (3, 3), (1, 1)),
+            nn.Conv2d(256, 256, (1, 1), (1, 1)),
             nn.ReLU(),
             nn.Conv2d(256, 20, (1, 1), (1, 1)))
+        # for layer in self.classifier():
+        #     if type(layer) == nn.Conv2d:
+        #         nn.init.xavier_uniform(layer.weight)
 
 
     def forward(self, x):
@@ -135,14 +138,15 @@ def localizer_alexnet(pretrained=False, **kwargs):
     if pretrained == True:
         pretrained_state = model_zoo.load_url(model_urls['alexnet'].replace('https://', 'http://'))
         pretrained_state = {k: v for k, v in pretrained_state.items() if k.split('.')[0] == 'features'}
-        print(pretrained_state.keys())
         model_state = model.state_dict()
         model_state.update(pretrained_state)
-        print(model.state_dict().keys())
         model.load_state_dict(model_state)
-
         # alexnet_model = models.__dict__['alexnet'](pretrained=True)
         # model.features = alexnet_model.features
+        for layer in model.classifier:
+            if type(layer) == nn.Conv2d:
+                nn.init.xavier_uniform(layer.weight)
+                # nn.init.xavier_uniform(layer.bias)
     return model
 
 def localizer_alexnet_robust(pretrained=False, **kwargs):

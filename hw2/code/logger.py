@@ -4,13 +4,13 @@ Modified by: Senthil Purushwalkam
 Code referenced from https://gist.github.com/gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514
 Email: spurushw<at>andrew<dot>cmu<dot>edu
 Github: https://github.com/senthilps8
-Description: 
+Description:
 """
 
 import tensorflow as tf
 from torch.autograd import Variable
 import numpy as np
-import scipy.misc 
+import scipy.misc
 import os
 try:
     from StringIO import StringIO  # Python 2.7
@@ -19,7 +19,7 @@ except ImportError:
 
 
 class Logger(object):
-    
+
     def __init__(self, log_dir, name=None):
         """Create a summary writer logging to log_dir."""
         if name is None:
@@ -30,10 +30,12 @@ class Logger(object):
                 os.makedirs(os.path.join(log_dir, name))
             except:
                 pass
-            self.writer = tf.summary.FileWriter(os.path.join(log_dir, name),
-                                                filename_suffix=name)
+            self.writer = tf.summary.FileWriter(os.path.join(log_dir, name))
+            # self.writer = tf.summary.FileWriter(os.path.join(log_dir, name),
+            #                                     filename_suffix=name)
         else:
-            self.writer = tf.summary.FileWriter(log_dir, filename_suffix=name)
+            self.writer = tf.summary.FileWriter(log_dir)
+            # self.writer = tf.summary.FileWriter(log_dir, filename_suffix=name)
 
     def scalar_summary(self, tag, value, step):
         """Log a scalar variable."""
@@ -50,6 +52,7 @@ class Logger(object):
                 s = StringIO()
             except:
                 s = BytesIO()
+            # print(img.shape)
             scipy.misc.toimage(img).save(s, format="png")
 
             # Create an Image object
@@ -62,7 +65,7 @@ class Logger(object):
         # Create and write Summary
         summary = tf.Summary(value=img_summaries)
         self.writer.add_summary(summary, step)
-        
+
     def histo_summary(self, tag, values, step, bins=1000):
         """Log a histogram of the tensor of values."""
 
@@ -109,5 +112,4 @@ class Logger(object):
             tag = tag.replace('.', '/')
             tag = self.name+'/'+tag
             self.histo_summary(tag, self.to_np(value), step)
-            self.histo_summary(tag+'/grad', self.to_np(value.grad), step)  
-
+            self.histo_summary(tag+'/grad', self.to_np(value.grad), step)
