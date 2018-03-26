@@ -2,7 +2,9 @@ import argparse
 import os
 import shutil
 import time
+import math
 import sys
+import scipy.misc as sci
 # sys.path.insert(0,'/home/spurushw/reps/hw-wsddn-sol/faster_rcnn')
 sys.path.insert(0, '../faster_rcnn')
 import sklearn
@@ -29,6 +31,9 @@ from logger import *
 
 vis = visdom.Visdom(server='http://address.com', port='8098')
 
+torch.manual_seed(42)
+np.random.seed(0)
+
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(models.__dict__[name]))
@@ -41,9 +46,9 @@ parser.add_argument('--epochs', default=2, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
+parser.add_argument('-b', '--batch-size', default=32, type=int,
                     metavar='N', help='mini-batch size (default: 256)')
-parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.01, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
@@ -88,8 +93,8 @@ def main():
 
     # TODO:
     # define loss function (criterion) and optimizer
-    # criterion = nn.BCEWithLogitsLoss().cuda()
-    criterion = nn.MultiLabelSoftMarginLoss().cuda()
+    criterion = nn.BCEWithLogitsLoss().cuda()
+    # criterion = nn.MultiLabelSoftMarginLoss().cuda()
     optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                momentum=args.momentum,
                                weight_decay=args.weight_decay)
@@ -128,9 +133,13 @@ def main():
             normalize,
         ]))
     train_sampler = None
+
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
+        train_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
+    # train_loader = torch.utils.data.DataLoader(
+    #     train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
+    #     num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
     val_loader = torch.utils.data.DataLoader(
         IMDBDataset(test_imdb, transforms.Compose([
@@ -211,21 +220,14 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
         # print(imoutput.size())
         # compute loss
         loss = criterion(imoutput, target_var)
-
-        # loss go to Inf using BCEWithLogitsLoss
-        # for i in range(num_cls):
-        #     if i == 0:
-        #         loss = criterion(imoutput[:,i], target_var[:,i])
-        #         # print(loss)
-        #     else:
-        #         loss = torch.add(loss, criterion(imoutput[:,i], target_var[:,i]))
-                # print(loss)
+        # loss = F.binary_cross_entropy_with_logits(imoutput, target_var)
 
         # measure metrics and record loss
         m1 = metric1(imoutput.data, target)
         m2 = metric2(imoutput.data, target)
         losses.update(loss.data[0], input.size(0))
-        avg_m1.update(m1[0], input.size(0))
+        # avg_m1.update(m1[0], input.size(0))
+        avg_m1.update(m1, input.size(0))
         avg_m2.update(m2[0], input.size(0))
 
         # TODO:
@@ -259,24 +261,34 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
             logger.scalar_summary('train/metric1', avg_m1.val, global_step)
             logger.scalar_summary('train/metric2', avg_m2.val, global_step)
         # save images and heatmaps
-        if i % (steps_per_epoch // 5) == 0:
+        if i % (steps_per_epoch // 4) == steps_per_epoch//4 - 1:
             # tensorboard
             global_step = epoch * steps_per_epoch + i
             input_imgs = input.numpy()
-            logger.image_summary('train/images', input_imgs, global_step) # how to transofrm rgb image
+            bs, ch, h, w = input_imgs.shape
+            # logger.image_summary('train/images', input_imgs, global_step) # how to transofrm rgb image
 
             #save heatmaps, if multiple, save the first one
+            output = F.sigmoid(output)
             output_imgs = output.cpu().data.numpy()
-            bs, c, n, m = output_imgs.shape
-            heatmaps = np.ones((bs, n, m))
+            # bs, c, n, m = output_imgs.shape
+            heatmap_all = np.ones((1, bs*h, w))
+            input_all = np.ones((ch, bs*h, w))
             for j in range(bs):
                 gt_cls = [i for i, x in enumerate(target[j]) if x == 1]
-                heatmaps[j] = output_imgs[j][gt_cls[0]]
-            logger.image_summary('train/heatmaps', heatmaps, global_step)
+                tmp = output_imgs[j][gt_cls[0]]
+                print(np.max(tmp))
+                tmp = sci.imresize(tmp, (h, w))
+                heatmap_all[:, j*h:(j+1)*h, :] = tmp
+                input_all[:, j*h:(j+1)*h, :] = input_imgs[j]
+            logger.image_summary('train/images', [input_all], global_step)
+            logger.image_summary('train/heatmaps', heatmap_all, global_step)
+
+            logger.model_param_histo_summary(model, global_step)
 
             # visdom
-            # vis.images(input, opts=dict(title='Image', caption='training images'))
-            # vis.images(heatmaps, opts=dict(title='Image', caption='heatmaps'))
+            # vis.images(input_all, opts=dict(title='Image', caption='training images'))
+            # vis.images(heatmap_all, opts=dict(title='Image', caption='heatmaps'))
 
             #heatmap one image per batch
             # input_img = [input[0].numpy()]
@@ -327,7 +339,8 @@ def validate(val_loader, num_cls, model, criterion, epoch, logger):
         m1 = metric1(imoutput.data, target)
         m2 = metric2(imoutput.data, target)
         losses.update(loss.data[0], input.size(0))
-        avg_m1.update(m1[0], input.size(0))
+        # avg_m1.update(m1[0], input.size(0))
+        avg_m1.update(m1, input.size(0))
         avg_m2.update(m2[0], input.size(0))
 
         # measure elapsed time
@@ -345,8 +358,8 @@ def validate(val_loader, num_cls, model, criterion, epoch, logger):
 
         #TODO: Visualize things as mentioned in handout
         #TODO: Visualize at appropriate intervals
-    logger.scalar_summary('val/metric1', avg_m1.avg, epoch)
-    logger.scalar_summary('val/metric2', avg_m2.avg, epoch)
+    logger.scalar_summary('validation/metric1', avg_m1.avg, epoch)
+    logger.scalar_summary('validation/metric2', avg_m2.avg, epoch)
 
 
 
@@ -394,13 +407,18 @@ def metric1(output, target):
     bs, num_cls = target.shape
     ap_all = []
     output = F.sigmoid(output)
+    num = num_cls
     for i in range(num_cls):
         tar_cls = target[:, i]
         out_cls = output[:, i]
         out_cls -= 1e-5 * tar_cls
         ap = sklearn.metrics.average_precision_score(tar_cls, out_cls, average='samples')
+        if math.isnan(ap):
+            ap = 0
+            num -= 1
         ap_all.append(ap)
-    return ap_all
+    ap_mean = np.mean(ap_all) / float(num)
+    return ap_mean
 
 def metric2(output, target):
     # TODO: Ignore for now - proceed till instructed
