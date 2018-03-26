@@ -1,5 +1,6 @@
 import os
 import visdom
+import torchvision.transforms as trans
 import _init_paths
 import torch
 import xml.etree.ElementTree as ET
@@ -12,7 +13,7 @@ import uuid
 from datasets.factory import get_imdb
 import cv2
 
-vis = visdom.Visdom(server='http://address.com', port='8097')
+vis = visdom.Visdom(server='http://address.com', port='8098')
 
 imdb = get_imdb('voc_2007_trainval')
 roidb = imdb.selective_search_roidb()
@@ -55,7 +56,10 @@ for i in xrange(10):
                         1.0, (0, 0, 255), thickness=1)
 cv2.imwrite('2008_ss.jpg', img_ss)
 
-img_gt = img_gt.transpose(2,0,1)
-img_ss = img_ss.transpose(2,0,1)
-vis.image(img_gt)
-vis.image(img_ss)
+# img_gt = img_gt.transpose(2,0,1)
+# img_ss = img_ss.transpose(2,0,1)
+# vis.image(img_gt)
+# vis.image(img_ss)
+imgTensor = trans.ToTensor()
+img_gt = imgTensor(img_gt)
+vis.image(img_gt, opts=dict(title='Image', caption='Ground True Bounding Box'))
