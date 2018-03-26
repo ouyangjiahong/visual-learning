@@ -93,7 +93,7 @@ def main():
 
     # TODO:
     # define loss function (criterion) and optimizer
-    criterion = nn.BCEWithLogitsLoss().cuda()
+    criterion = nn.BCELoss().cuda()
     # criterion = nn.MultiLabelSoftMarginLoss().cuda()
     optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                momentum=args.momentum,
@@ -210,14 +210,13 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
         # TODO: Compute loss using ``criterion``
         # compute output
         bs = input.size(0)
-        output = model(input_var)
-        # print(output.size())
-        n, m = output.size(2), output.size(3)
-        # print(output.max())
-        imoutput = F.max_pool2d(output, kernel_size=(n,m))
-        # print(imoutput.size())
+        output = model(input_var)        
+        # sigmoid = nn.Sigmoid()
+        # output_sig = sigmoid(output)
+        output_sig = F.sigmoid(output)
+        n, m = output_sig.size(2), output_sig.size(3)
+        imoutput = F.max_pool2d(output_sig, kernel_size=(n,m))
         imoutput = torch.squeeze(imoutput)
-        # print(imoutput.size())
         # compute loss
         loss = criterion(imoutput, target_var)
         # loss = F.binary_cross_entropy_with_logits(imoutput, target_var)
@@ -269,8 +268,8 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
             # logger.image_summary('train/images', input_imgs, global_step) # how to transofrm rgb image
 
             #save heatmaps, if multiple, save the first one
-            output = F.sigmoid(output)
-            output_imgs = output.cpu().data.numpy()
+            # output = F.sigmoid(output)
+            output_imgs = output_sig.cpu().data.numpy()
             # bs, c, n, m = output_imgs.shape
             heatmap_all = np.ones((1, bs*h, w))
             input_all = np.ones((ch, bs*h, w))
@@ -327,8 +326,9 @@ def validate(val_loader, num_cls, model, criterion, epoch, logger):
         # compute output
         bs = input.size(0)
         output = model(input_var)
-        n, m = output.size(2), output.size(3)
-        imoutput = F.max_pool2d(output, kernel_size=(n,m))
+        output_sig = F.sigmoid(output)
+        n, m = output_sig.size(2), output_sig.size(3)
+        imoutput = F.max_pool2d(output_sig, kernel_size=(n,m))
         imoutput = torch.squeeze(imoutput)
         # print(imoutput.size())
 
@@ -406,18 +406,17 @@ def metric1(output, target):
     # TODO: Ignore for now - proceed till instructed
     bs, num_cls = target.shape
     ap_all = []
-    output = F.sigmoid(output)
     num = num_cls
     for i in range(num_cls):
         tar_cls = target[:, i]
         out_cls = output[:, i]
         out_cls -= 1e-5 * tar_cls
-        ap = sklearn.metrics.average_precision_score(tar_cls, out_cls, average='samples')
+        ap = sklearn.metrics.average_precision_score(tar_cls, out_cls, average=None)
         if math.isnan(ap):
             ap = 0
             num -= 1
         ap_all.append(ap)
-    ap_mean = np.mean(ap_all) / float(num)
+    ap_mean = np.sum(ap_all) / float(num)
     return ap_mean
 
 def metric2(output, target):

@@ -13,7 +13,7 @@ import uuid
 from datasets.factory import get_imdb
 import cv2
 
-vis = visdom.Visdom(server='http://address.com', port='8098')
+vis = visdom.Visdom(server='http://localhost.com', port='8888')
 
 imdb = get_imdb('voc_2007_trainval')
 roidb = imdb.selective_search_roidb()
