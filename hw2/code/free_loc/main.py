@@ -407,10 +407,7 @@ def metric1(output, target):
     bs, num_cls = target.shape
     ap_all = []
     output = F.sigmoid(output)
-<<<<<<< HEAD
-=======
     num = num_cls
->>>>>>> b89701dbab0f104c0cedc367429c6ab592c6e59d
     for i in range(num_cls):
         tar_cls = target[:, i]
         out_cls = output[:, i]
@@ -418,15 +415,10 @@ def metric1(output, target):
         ap = sklearn.metrics.average_precision_score(tar_cls, out_cls, average='samples')
         if math.isnan(ap):
             ap = 0
-<<<<<<< HEAD
-        ap_all.append(ap)
-    return ap_all
-=======
             num -= 1
         ap_all.append(ap)
     ap_mean = np.mean(ap_all) / float(num)
     return ap_mean
->>>>>>> b89701dbab0f104c0cedc367429c6ab592c6e59d
 
 def metric2(output, target):
     # TODO: Ignore for now - proceed till instructed
