@@ -29,7 +29,7 @@ from custom import *
 sys.path.insert(0, '../')
 from logger import *
 
-vis = visdom.Visdom(server='http://address.com', port='8098')
+vis = visdom.Visdom(server='http://128.2.176.219', port='8097')
 
 torch.manual_seed(42)
 np.random.seed(0)
@@ -73,6 +73,30 @@ parser.add_argument('--dist-backend', default='gloo', type=str,
 parser.add_argument('--vis',action='store_true')
 
 best_prec1 = 0
+
+
+CLASS_NAMES = [
+    'aeroplane',
+    'bicycle',
+    'bird',
+    'boat',
+    'bottle',
+    'bus',
+    'car',
+    'cat',
+    'chair',
+    'cow',
+    'diningtable',
+    'dog',
+    'horse',
+    'motorbike',
+    'person',
+    'pottedplant',
+    'sheep',
+    'sofa',
+    'train',
+    'tvmonitor',
+]
 
 
 def main():
@@ -147,7 +171,7 @@ def main():
             transforms.ToTensor(),
             normalize,
         ])),
-        batch_size=args.batch_size, shuffle=False,
+        batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
 
     if args.evaluate:
@@ -165,11 +189,14 @@ def main():
         adjust_learning_rate(optimizer, epoch)
 
         # train for one epoch
+        plot_random(model, val_loader)
         train(train_loader, num_cls, model, criterion, optimizer, epoch, logger)
 
         # evaluate on validation set
         if epoch%args.eval_freq==0 or epoch==args.epochs-1:
             m1, m2 = validate(val_loader, num_cls, model, criterion, epoch, logger)
+            if epoch == args.epochs-1:
+                plot_random(val_loader)
             score = m1*m2
             # remember best prec@1 and save checkpoint
             is_best =  score > best_prec1
@@ -181,6 +208,43 @@ def main():
                 'best_prec1': best_prec1,
                 'optimizer' : optimizer.state_dict(),
             }, is_best)
+
+
+def denormalize(image):
+    std = [0.229, 0.224, 0.225]
+    mean = [0.485, 0.456, 0.406]
+    for i in range(3):
+        image[i] = image[i] * std[i] + mean[i]
+    return image
+
+
+def plot_random(model, val_loader):
+    denorm = transforms.Lambda(denormalize)
+    for i, (input, target) in enumerate(val_loader):
+        target = target.type(torch.FloatTensor).cuda(async=True)
+        input_var = torch.autograd.Variable(input, requires_grad=True)
+        target_var = torch.autograd.Variable(target)
+
+        output = model(input_var)        
+        output_sig = F.sigmoid(output)
+        n, m = output_sig.size(2), output_sig.size(3)
+        
+        output_imgs = output_sig.cpu().data.numpy()
+        input_imgs = input.numpy()
+        input_all = input_imgs
+        bs, ch, h, w = input_all.shape
+
+        for j in range(20):
+            input_imgs[j] = denorm(input_all[j])
+            vis.image(input_imgs[j], opts=dict(title='Image', caption='random' + format(j, '02d') + '_image'))
+
+            gt_cls = [i for i, x in enumerate(target[j]) if x == 1]
+            for k in range(len(gt_cls)):
+                tmp = output_imgs[j][gt_cls[0]]
+                tmp = sci.imresize(tmp, (h, w))
+                vis.image(tmp, opts=dict(title='Image', caption='random' + format(j, '02d') + '_heatmap_' + CLASS_NAMES[gt_cls[k]]))
+        break
+
 
 
 #TODO: You can add input arguments if you wish
@@ -227,7 +291,7 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
         losses.update(loss.data[0], input.size(0))
         # avg_m1.update(m1[0], input.size(0))
         avg_m1.update(m1, input.size(0))
-        avg_m2.update(m2[0], input.size(0))
+        avg_m2.update(m2, input.size(0))
 
         # TODO:
         # compute gradient and do SGD step
@@ -259,6 +323,7 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
             logger.scalar_summary('train/loss', loss, global_step)
             logger.scalar_summary('train/metric1', avg_m1.val, global_step)
             logger.scalar_summary('train/metric2', avg_m2.val, global_step)
+        
         # save images and heatmaps
         if i % (steps_per_epoch // 4) == steps_per_epoch//4 - 1:
             # tensorboard
@@ -278,16 +343,28 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
                 tmp = output_imgs[j][gt_cls[0]]
                 print(np.max(tmp))
                 tmp = sci.imresize(tmp, (h, w))
+                # concatenate images and heatmaps into a long image
                 heatmap_all[:, j*h:(j+1)*h, :] = tmp
                 input_all[:, j*h:(j+1)*h, :] = input_imgs[j]
+
+
             logger.image_summary('train/images', [input_all], global_step)
             logger.image_summary('train/heatmaps', heatmap_all, global_step)
 
             logger.model_param_histo_summary(model, global_step)
 
             # visdom
-            # vis.images(input_all, opts=dict(title='Image', caption='training images'))
-            # vis.images(heatmap_all, opts=dict(title='Image', caption='heatmaps'))
+            denorm = transforms.Lambda(denormalize)
+            for j in range(bs):
+                caption = format(epoch, '02d') + '_' + format(i, '03d') + '_' + format(j, '02d') + '_image' 
+                tmp = denorm(input_imgs[j])
+                vis.image(tmp, opts=dict(title='Image', caption=caption))
+                gt_cls = [i for i, x in enumerate(target[j]) if x == 1]
+                for k in range(len(gt_cls)):
+                    tmp = output_imgs[j][gt_cls[k]]
+                    tmp = sci.imresize(tmp, (h, w))
+                    caption = format(epoch, '02d') + '_' + format(i, '03d') + '_' + format(j, '02d') + '_heatmap_' + CLASS_NAMES[gt_cls[k]]
+                    vis.image(tmp, opts=dict(title='Image', caption=caption))
 
             #heatmap one image per batch
             # input_img = [input[0].numpy()]
@@ -296,12 +373,6 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
             # output_img = output[0].cpu().data.numpy()
             # heatmap = [output_img[i] for i in gt_cls]
             # logger.image_summary('train/heatmap', heatmap, global_step)
-
-            # visdom
-            # vis.image(input[0], opts=dict(title='Image', caption='training image'))
-            # output_img = output[0].cpu().data
-            # heatmap = [output_img[i] for i in gt_cls]
-            # vis.images(heatmap, opts=dict(title='Image', caption='heatmaps'))
 
 
 def validate(val_loader, num_cls, model, criterion, epoch, logger):
@@ -341,7 +412,7 @@ def validate(val_loader, num_cls, model, criterion, epoch, logger):
         losses.update(loss.data[0], input.size(0))
         # avg_m1.update(m1[0], input.size(0))
         avg_m1.update(m1, input.size(0))
-        avg_m2.update(m2[0], input.size(0))
+        avg_m2.update(m2, input.size(0))
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -360,8 +431,6 @@ def validate(val_loader, num_cls, model, criterion, epoch, logger):
         #TODO: Visualize at appropriate intervals
     logger.scalar_summary('validation/metric1', avg_m1.avg, epoch)
     logger.scalar_summary('validation/metric2', avg_m2.avg, epoch)
-
-
 
 
     print(' * Metric1 {avg_m1.avg:.3f} Metric2 {avg_m2.avg:.3f}'
@@ -421,7 +490,17 @@ def metric1(output, target):
 
 def metric2(output, target):
     # TODO: Ignore for now - proceed till instructed
-    return [0]
+    bs, num_cls = target.shape
+    k = 5
+    count = 0
+    target = target.cpu().numpy()
+    for i in range(bs):
+        out_idx = np.argsort(output[i,:])
+        top_idx = out_idx[0:k]
+        count_tmp = target[i, top_idx]
+        count_tmp = np.sum(count_tmp)
+        count += (count_tmp>=1)
+    return count / float(bs)
 
 if __name__ == '__main__':
     main()
