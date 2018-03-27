@@ -13,7 +13,7 @@ import uuid
 from datasets.factory import get_imdb
 import cv2
 
-vis = visdom.Visdom(server='http://address.com', port='8098')
+vis = visdom.Visdom(server='http://128.2.176.219', port='8097')
 
 imdb = get_imdb('voc_2007_trainval')
 roidb = imdb.selective_search_roidb()
@@ -56,10 +56,16 @@ for i in xrange(10):
                         1.0, (0, 0, 255), thickness=1)
 cv2.imwrite('2008_ss.jpg', img_ss)
 
-# img_gt = img_gt.transpose(2,0,1)
-# img_ss = img_ss.transpose(2,0,1)
+r, g, b = cv2.split(img_gt)
+img_gt = cv2.merge([b, g, r])
+img_gt = img_gt.transpose(2,0,1)
+
+r, g, b = cv2.split(img_ss)
+img_ss = cv2.merge([b, g, r])
+img_ss = img_ss.transpose(2,0,1)
 # vis.image(img_gt)
 # vis.image(img_ss)
-imgTensor = trans.ToTensor()
-img_gt = imgTensor(img_gt)
+# imgTensor = trans.ToTensor()
+# img_gt = imgTensor(img_gt)
 vis.image(img_gt, opts=dict(title='Image', caption='Ground True Bounding Box'))
+vis.image(img_ss, opts=dict(title='Image', caption='Selective Search Bounding Box'))
