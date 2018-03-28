@@ -171,7 +171,7 @@ def main():
             transforms.ToTensor(),
             normalize,
         ])),
-        batch_size=args.batch_size, shuffle=True,
+        batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
     if args.evaluate:
@@ -189,14 +189,11 @@ def main():
         adjust_learning_rate(optimizer, epoch)
 
         # train for one epoch
-        plot_random(model, val_loader)
         train(train_loader, num_cls, model, criterion, optimizer, epoch, logger)
 
         # evaluate on validation set
         if epoch%args.eval_freq==0 or epoch==args.epochs-1:
             m1, m2 = validate(val_loader, num_cls, model, criterion, epoch, logger)
-            if epoch == args.epochs-1:
-                plot_random(val_loader)
             score = m1*m2
             # remember best prec@1 and save checkpoint
             is_best =  score > best_prec1
@@ -208,6 +205,7 @@ def main():
                 'best_prec1': best_prec1,
                 'optimizer' : optimizer.state_dict(),
             }, is_best)
+    plot_random(model, val_loader)
 
 
 def denormalize(image):
