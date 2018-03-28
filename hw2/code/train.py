@@ -81,6 +81,7 @@ else:
     pret_net = model_zoo.load_url('https://download.pytorch.org/models/alexnet-owt-4df8aa71.pth')
     pkl.dump(pret_net, open('pretrained_alexnet.pkl','wb'), pkl.HIGHEST_PROTOCOL)
 own_state = net.state_dict()
+
 for name, param in pret_net.items():
     if name not in own_state:
         continue
@@ -100,8 +101,8 @@ net.train()
 
 # Create optimizer for network parameters
 params = list(net.parameters())
-optimizer = torch.optim.SGD(params[2:], lr=lr, 
-                            momentum=momentum, weight_decay=weight_decay)
+# optimizer = torch.optim.SGD(params[2:], lr=lr, 
+#                             momentum=momentum, weight_decay=weight_decay)
 
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
@@ -121,10 +122,14 @@ for step in range(start_step, end_step+1):
     rois = blobs['rois']
     im_info = blobs['im_info']
     gt_vec = blobs['labels']
-    #gt_boxes = blobs['gt_boxes']
+    print(im_data.shape)
+    print(rois.shape)
+    print(im_info.shape)
+    print(gt_vec.shape)
 
     # forward
     net(im_data, rois, im_info, gt_vec)
+    print(net.features.shape)
     loss = net.loss
     train_loss += loss.data[0]
     step_cnt += 1

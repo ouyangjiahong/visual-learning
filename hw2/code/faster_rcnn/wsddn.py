@@ -103,8 +103,7 @@ class WSDDN(nn.Module):
         
         x = self.features(im_data)
         x = self.roi_pool(x, rois)
-        print(x.shape)
-        x = torch.reshape(x, (-1, 1024))
+        x = x.view(x.size(0), -1)
         x = self.classifier(x)
         score_cls = self.score_cls(x)
         score_det = self.score_det(x)
