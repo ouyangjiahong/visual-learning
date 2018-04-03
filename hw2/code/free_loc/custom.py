@@ -1,5 +1,6 @@
 import torch.utils.data as data
 import torch.nn as nn
+import torch.nn.parameter as Parameter
 import torch.utils.model_zoo as model_zoo
 import torchvision.models as models
 model_urls = {
@@ -81,26 +82,23 @@ class LocalizerAlexNet(nn.Module):
         # MaxPool2d(kernel_size, strides, padding, dilation)
         self.features = nn.Sequential(
             nn.Conv2d(3, 64, (11, 11), (4, 4), (2, 2)),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.MaxPool2d((3, 3), (2, 2), dilation=(1, 1), ceil_mode=False),
             nn.Conv2d(64, 192, (5, 5), (1, 1), (2, 2)),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.MaxPool2d((3, 3), (2, 2), dilation=(1, 1), ceil_mode=False),
             nn.Conv2d(192, 384, (3, 3), (1, 1), (1, 1)),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.Conv2d(384, 256, (3, 3), (1, 1), (1, 1)),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, (3, 3), (1, 1), (1, 1)),
-            nn.ReLU())
+            nn.ReLU(inplace=True))
         self.classifier = nn.Sequential(
             nn.Conv2d(256, 256, (3, 3), (1, 1)),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, (1, 1), (1, 1)),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.Conv2d(256, 20, (1, 1), (1, 1)))
-        # for layer in self.classifier():
-        #     if type(layer) == nn.Conv2d:
-        #         nn.init.xavier_uniform(layer.weight)
 
 
     def forward(self, x):
@@ -112,15 +110,37 @@ class LocalizerAlexNet(nn.Module):
 
 class LocalizerAlexNetRobust(nn.Module):
     def __init__(self, num_classes=20):
-        super(LocalizerAlexNetHighres, self).__init__()
+        # super(LocalizerAlexNetHighres, self).__init__()
+        super(LocalizerAlexNetRobust, self).__init__()
         #TODO: Ignore for now until instructed
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, (11, 11), (4, 4), (2, 2)),
+            nn.ReLU(inplace=True),
+            nn.Dropout2d(p=0.2),
+            nn.MaxPool2d((3, 3), (2, 2), dilation=(1, 1), ceil_mode=False),
+            nn.Conv2d(64, 192, (5, 5), (1, 1), (2, 2)),
+            nn.ReLU(inplace=True),
+            nn.Dropout2d(p=0.2),
+            nn.MaxPool2d((3, 3), (2, 2), dilation=(1, 1), ceil_mode=False),
+            nn.Conv2d(192, 384, (3, 3), (1, 1), (1, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(384, 256, (3, 3), (1, 1), (1, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, (3, 3), (1, 1), (1, 1)),
+            nn.ReLU(inplace=True))
+        self.classifier = nn.Sequential(
+            nn.Conv2d(256, 256, (3, 3), (1, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, (1, 1), (1, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 20, (1, 1), (1, 1)))
 
 
 
     def forward(self, x):
         #TODO: Ignore for now until instructed
-
-
+        x = self.features(x)
+        x = self.classifier(x)
         return x
 
 
@@ -136,13 +156,25 @@ def localizer_alexnet(pretrained=False, **kwargs):
     #TODO: Initialize weights correctly based on whether it is pretrained or
     #not
     if pretrained == True:
+        print("load pretrained model")
         pretrained_state = model_zoo.load_url(model_urls['alexnet'].replace('https://', 'http://'))
         pretrained_state = {k: v for k, v in pretrained_state.items() if k.split('.')[0] == 'features'}
         model_state = model.state_dict()
         model_state.update(pretrained_state)
         model.load_state_dict(model_state)
-        # alexnet_model = models.__dict__['alexnet'](pretrained=True)
-        # model.features = alexnet_model.features
+
+        # for name, param in pretrained_state.items():
+        #     if name not in model_state:
+        #         continue
+        #     # if isinstance(param, Parameter):
+        #     param = param.data
+        #     try:
+        #         model_state[name].copy_(param)
+        #         print('copied {}'.format(name))
+        #     except:
+        #         print('did not copied {}'.format(name))
+        #         continue
+
         for layer in model.classifier:
             if type(layer) == nn.Conv2d:
                 nn.init.xavier_uniform(layer.weight)
@@ -159,9 +191,28 @@ def localizer_alexnet_robust(pretrained=False, **kwargs):
     model = LocalizerAlexNetRobust(**kwargs)
     #TODO: Ignore for now until instructed
     if pretrained == True:
-        # model.load_state_dict(model_zoo.load_url(model_urls['alexnet']))
-        alexnet_model = models.__dict__['alexnet'](pretrained=True)
-        model.features = alexnet_model.features
+        pretrained_state_ori = model_zoo.load_url(model_urls['alexnet'].replace('https://', 'http://'))
+        # pretrained_state = {k: v for k, v in pretrained_state.items() if k.split('.')[0] == 'features'}
+        pretrained_state = {}
+        for k, v in pretrained_state_ori.items():
+            if k.split('.')[0] == 'features':
+                k_split = k.split('.')
+                print(k_split[1])
+                if k_split[1] == '3':
+                    k = 'features.4.' + k_split[2]
+                elif k_split[1] == '6' or k_split[1] == '8' or k_split[1] == '10':
+                    k = 'features.' + str(int(k_split[1])+2) + '.' + k_split[2]
+                print(k)
+                pretrained_state[k] = v
+
+        model_state = model.state_dict()
+        model_state.update(pretrained_state)
+        model.load_state_dict(model_state)
+        # alexnet_model = models.__dict__['alexnet'](pretrained=True)
+        # model.features = alexnet_model.features
+        for layer in model.classifier:
+            if type(layer) == nn.Conv2d:
+                nn.init.xavier_uniform(layer.weight)
 
     return model
 
