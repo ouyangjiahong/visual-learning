@@ -53,6 +53,10 @@ class Logger(object):
             except:
                 s = BytesIO()
             # print(img.shape)
+            # print("max")
+            # print(np.max(img))
+            # print("min")
+            # print(np.min(img))
             scipy.misc.toimage(img).save(s, format="png")
 
             # Create an Image object
