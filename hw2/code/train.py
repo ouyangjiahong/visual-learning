@@ -18,11 +18,17 @@ import roi_data_layer.roidb as rdl_roidb
 from roi_data_layer.layer import RoIDataLayer
 from datasets.factory import get_imdb
 from fast_rcnn.config import cfg, cfg_from_file
+from logger import *
+import visdom
 
 try:
     from termcolor import cprint
 except ImportError:
     cprint = None
+
+vis = visdom.Visdom(server='http://128.2.176.219', port='8097')
+log_dir = 'model/'
+logger = Logger(log_dir, name = 'wsddn')	
 
 def log_print(text, color=None, on_color=None, attrs=None):
     if cprint is not None:
@@ -46,8 +52,8 @@ lr_decay = 1./10
 
 rand_seed = 1024
 _DEBUG = False
-use_tensorboard = False
-use_visdom = False
+use_tensorboard = True
+use_visdom = True
 log_grads = False
 
 remove_all_log = False   # remove all historical experiments in TensorBoard
@@ -101,8 +107,8 @@ net.train()
 
 # Create optimizer for network parameters
 params = list(net.parameters())
-# optimizer = torch.optim.SGD(params[2:], lr=lr, 
-#                             momentum=momentum, weight_decay=weight_decay)
+optimizer = torch.optim.SGD(params[2:], lr=lr, 
+                            momentum=momentum, weight_decay=weight_decay)
 
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
@@ -122,15 +128,15 @@ for step in range(start_step, end_step+1):
     rois = blobs['rois']
     im_info = blobs['im_info']
     gt_vec = blobs['labels']
-    print(im_data.shape)
-    print(rois.shape)
-    print(im_info.shape)
-    print(gt_vec.shape)
+    # print(im_data.shape)
+    # print(rois.shape)
+    # print(im_info.shape)
+    # print(gt_vec.shape)
 
     # forward
     net(im_data, rois, im_info, gt_vec)
-    print(net.features.shape)
     loss = net.loss
+    # print(loss)
     train_loss += loss.data[0]
     step_cnt += 1
 
@@ -151,18 +157,23 @@ for step in range(start_step, end_step+1):
     #TODO: evaluate the model every N iterations (N defined in handout)
 
 
-
-
     #TODO: Perform all visualizations here
     #You can define other interval variable if you want (this is just an
     #example)
     #The intervals for different things are defined in the handout
-    if visualize and step%vis_interval==0:
+    if visualize:
         #TODO: Create required visualizations
         if use_tensorboard:
-            print('Logging to Tensorboard')
+            # print('Logging to Tensorboard')
+            if step % 5 == 0:
+            	logger.scalar_summary('train/loss', loss.data[0], step)
+            if step % 20 == 0:
+            	logger.model_param_histo_summary(net, step)
+            if step % vis_interval == 0:
+            	pass
         if use_visdom:
-            print('Logging to visdom')
+        	pass
+            # print('Logging to visdom')
 
     
     # Save model occasionally 

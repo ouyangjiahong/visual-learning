@@ -42,7 +42,7 @@ parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('--arch', default='localizer_alexnet')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
-parser.add_argument('--epochs', default=2, type=int, metavar='N',
+parser.add_argument('--epochs', default=30, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
@@ -56,7 +56,7 @@ parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
 parser.add_argument('--print-freq', '-p', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
-parser.add_argument('--eval-freq', default=10, type=int,
+parser.add_argument('--eval-freq', default=2, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
@@ -240,7 +240,7 @@ def plot_random(model, val_loader):
             for k in range(len(gt_cls)):
                 tmp = output_imgs[j][gt_cls[0]]
                 tmp = sci.imresize(tmp, (h, w))
-                vis.image(tmp, opts=dict(title='Image', caption='random' + format(j, '02d') + '_heatmap_' + CLASS_NAMES[gt_cls[k]]))
+                vis.heatmap(tmp, opts=dict(title='random' + format(j, '02d') + '_heatmap_' + CLASS_NAMES[gt_cls[k]]))
         break
 
 
@@ -324,6 +324,7 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
         
         # save images and heatmaps
         if i % (steps_per_epoch // 4) == steps_per_epoch//4 - 1:
+            print('draw')
             # tensorboard
             global_step = epoch * steps_per_epoch + i
             input_imgs = input.numpy()
@@ -337,9 +338,9 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
             heatmap_all = np.ones((1, bs*h, w))
             input_all = np.ones((ch, bs*h, w))
             for j in range(bs):
-                gt_cls = [i for i, x in enumerate(target[j]) if x == 1]
+                gt_cls = [k for k, x in enumerate(target[j]) if x == 1]
                 tmp = output_imgs[j][gt_cls[0]]
-                print(np.max(tmp))
+                # print(np.max(tmp))
                 tmp = sci.imresize(tmp, (h, w))
                 # concatenate images and heatmaps into a long image
                 heatmap_all[:, j*h:(j+1)*h, :] = tmp
@@ -352,17 +353,17 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
             logger.model_param_histo_summary(model, global_step)
 
             # visdom
-            denorm = transforms.Lambda(denormalize)
-            for j in range(bs):
-                caption = format(epoch, '02d') + '_' + format(i, '03d') + '_' + format(j, '02d') + '_image' 
-                tmp = denorm(input_imgs[j])
-                vis.image(tmp, opts=dict(title='Image', caption=caption))
-                gt_cls = [i for i, x in enumerate(target[j]) if x == 1]
-                for k in range(len(gt_cls)):
-                    tmp = output_imgs[j][gt_cls[k]]
-                    tmp = sci.imresize(tmp, (h, w))
-                    caption = format(epoch, '02d') + '_' + format(i, '03d') + '_' + format(j, '02d') + '_heatmap_' + CLASS_NAMES[gt_cls[k]]
-                    vis.image(tmp, opts=dict(title='Image', caption=caption))
+            # denorm = transforms.Lambda(denormalize)
+            # for j in range(bs):
+            #     caption = format(epoch, '02d') + '_' + format(i, '03d') + '_' + format(j, '02d') + '_image' 
+            #     tmp = denorm(input_imgs[j])
+            #     vis.image(tmp, opts=dict(title='Image', caption=caption))
+            #     gt_cls = [k for k, x in enumerate(target[j]) if x == 1]
+            #     for k in range(len(gt_cls)):
+            #         tmp = output_imgs[j][gt_cls[k]]
+            #         tmp = sci.imresize(tmp, (h, w))
+            #         caption = format(epoch, '02d') + '_' + format(i, '03d') + '_' + format(j, '02d') + '_heatmap_' + CLASS_NAMES[gt_cls[k]]
+            #         vis.heatmap(tmp, opts=dict(title=caption))
 
             #heatmap one image per batch
             # input_img = [input[0].numpy()]

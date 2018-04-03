@@ -45,6 +45,7 @@ def make_dataset(imdb, class_to_idx):
     roidb = imdb.gt_roidb()
     # in pascal_voc, gt_classes=cls_to_idx=1
     gt_cls_list = [list(set(roidb[i]['gt_classes']-1)) for i in range(num_images)]
+
     images = zip(path_list, gt_cls_list)
     return images
 

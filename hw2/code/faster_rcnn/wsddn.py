@@ -58,7 +58,7 @@ class WSDDN(nn.Module):
             nn.Conv2d(256, 256, (3, 3), (1, 1), (1, 1)),
             nn.ReLU(inplace=True))
             
-        # self.roi_pool = RoIPool(6, 6, 0.06)
+        # self.roi_pool = RoIPool(6, 6, 1.0/16)
         # self.classifier = nn.Sequential(
         #     nn.Linear(in_features=9216, out_features=4096),
         #     nn.ReLU(inplace=True),
@@ -107,17 +107,19 @@ class WSDDN(nn.Module):
         x = self.classifier(x)
         score_cls = self.score_cls(x)
         score_det = self.score_det(x)
-        score_cls = nn.Softmax(score_cls)
-        score_det = nn.Softmax(score_det)
-        cls_prob = score_cls * score_det
-        print(cls_prob.shape)
+        # print(score_cls)
+        score_cls = F.softmax(score_cls, dim=1)
+        score_det = F.softmax(score_det, dim=0)
+        # print(score_det)
+        cls_prob = score_cls * score_det          # check how to implement
+        # print(cls_prob.shape)
 
 
 
 
         if self.training:
             label_vec = network.np_to_variable(gt_vec, is_cuda=True)
-            label_vec = label_vec.view(self.n_classes,-1)
+            # label_vec = label_vec.view(self.n_classes,-1)
             self.cross_entropy = self.build_loss(cls_prob, label_vec)
         return cls_prob
     
@@ -132,13 +134,12 @@ class WSDDN(nn.Module):
         #TODO: Compute the appropriate loss using the cls_prob that is the
         #output of forward()
         #Checkout forward() to see how it is called
-
-
-
-
-
-
-	return loss
+        # label_vec = torch.squeeze(label_vec)
+        label_pre = torch.sum(cls_prob, dim=0, keepdim=True)    #1*20
+        loss = 0
+        for i in range(self.n_classes):
+            loss += F.binary_cross_entropy(label_pre[:,i], label_vec[:,i])
+        return loss
 
     def get_image_blob_noscale(self, im):
         im_orig = im.astype(np.float32, copy=True)
