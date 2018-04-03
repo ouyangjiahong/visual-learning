@@ -19,7 +19,9 @@ from fast_rcnn.bbox_transform import bbox_transform_inv, clip_boxes
 from datasets.factory import get_imdb
 from fast_rcnn.config import cfg, cfg_from_file, get_output_dir
 
-from myutils import keyboard
+import sklearn
+import sklearn.metrics
+
 
 # hyper-parameters
 # ------------
@@ -91,6 +93,7 @@ def test_net(name, net, imdb, max_per_image=300, thresh=0.05, visualize=False,
              logger=None, step=None):
     """Test a Fast R-CNN network on an image database."""
     num_images = len(imdb.image_index)
+    num_images = 200
     # all detections are collected into:
     #    all_boxes[cls][image] = N x 5 array of detections in
     #    (x1, y1, x2, y2, score)
@@ -103,19 +106,28 @@ def test_net(name, net, imdb, max_per_image=300, thresh=0.05, visualize=False,
     _t = {'im_detect': Timer(), 'misc': Timer()}
     det_file = os.path.join(output_dir, 'detections.pkl')
 
-    roidb = imdb.roidb
-
+    scores_all = np.zeros((num_images, 20))
+    gt_all = np.zeros((num_images, 20))
+    plot_num = 0
     for i in range(num_images):
         im = cv2.imread(imdb.image_path_at(i))
         rois = imdb.roidb[i]['boxes']
+
+        gt = imdb.roidb[i]['gt_classes']
+        gt = list(set(gt - 1))
+        if -1 in gt:
+            gt.remove(-1)
+        gt_all[i, gt] = 1
+
         _t['im_detect'].tic()
         scores, boxes = im_detect(net, im, rois)
+        scores_all[i, :] = np.sum(scores, axis=0, keepdims=True)
         detect_time = _t['im_detect'].toc(average=False)
 
         _t['misc'].tic()
         if visualize:
-            # im2show = np.copy(im[:, :, (2, 1, 0)])
-            im2show = np.copy(im)
+            im2show = np.copy(im[:, :, (2, 1, 0)])
+            # im2show = np.copy(im)
 
         # skip j = 0, because it's the background class
         for j in xrange(1, imdb.num_classes+1):
@@ -128,7 +140,8 @@ def test_net(name, net, imdb, max_per_image=300, thresh=0.05, visualize=False,
             keep = nms(cls_dets, cfg.TEST.NMS)
             cls_dets = cls_dets[keep, :]
             if visualize:
-                im2show = vis_detections(im2show, imdb.classes[j], cls_dets)
+                im2show = vis_detections(im2show, imdb.classes[newj], cls_dets)
+                # im2show = vis_detections(im2show, imdb.classes[j], cls_dets)
             all_boxes[j][i] = cls_dets
 
         # Limit to max_per_image detections *over all classes*
@@ -148,15 +161,36 @@ def test_net(name, net, imdb, max_per_image=300, thresh=0.05, visualize=False,
             # TODO: Visualize here using tensorboard
             # TODO: use the logger that is an argument to this function
             print('Visualizing')
+            if plot_num < 5:
+                logger.image_summary('evaluate/images'+str(plot_num), [im2show], step)
+                plot_num += 1
             #cv2.imshow('test', im2show)
             #cv2.waitKey(1)
+
+    # show mAP
+    def metric(output, target):
+        bs, num_cls = target.shape
+        ap_all = []
+        for i in range(num_cls):
+            tar_cls = target[:, i]
+            out_cls = output[:, i]
+            out_cls -= 1e-5 * tar_cls
+            ap = sklearn.metrics.average_precision_score(tar_cls, out_cls, average=None)
+            ap_all.append(ap)
+        ap_mean = np.sum(ap_all) / float(num_cls)
+        return ap_mean, ap_all
+
+    ap_mean, ap_all = metric(scores_all, gt_all)
+
+
 
     with open(det_file, 'wb') as f:
         cPickle.dump(all_boxes, f, cPickle.HIGHEST_PROTOCOL)
 
     print('Evaluating detections')
-    aps = imdb.evaluate_detections(all_boxes, output_dir)
-    return aps
+    # aps = imdb.evaluate_detections(all_boxes, output_dir)
+    # return aps
+    return ap_mean, ap_all
 
 
 if __name__ == '__main__':
@@ -175,4 +209,4 @@ if __name__ == '__main__':
 
     # evaluation
     aps = test_net(save_name, net, imdb, 
-                   max_per_image, thresh=thresh, visualize=vis)
+                   max_per_image, thresh=thresh, visualize=visualize)

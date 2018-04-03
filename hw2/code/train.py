@@ -20,6 +20,7 @@ from datasets.factory import get_imdb
 from fast_rcnn.config import cfg, cfg_from_file
 from logger import *
 import visdom
+from test import *
 
 try:
     from termcolor import cprint
@@ -39,6 +40,7 @@ def log_print(text, color=None, on_color=None, attrs=None):
 # hyper-parameters
 # ------------
 imdb_name = 'voc_2007_trainval'
+imdb_name_test = 'voc_2007_test'
 cfg_file = 'experiments/cfgs/wsddn.yml'
 pretrained_model = 'data/pretrained_model/alexnet_imagenet.npy'
 output_dir = 'models/saved_model'
@@ -71,13 +73,18 @@ weight_decay = cfg.TRAIN.WEIGHT_DECAY
 disp_interval = cfg.TRAIN.DISPLAY
 log_interval = cfg.TRAIN.LOG_IMAGE_ITERS
 
-
+print('before load data')
 # load imdb and create data later
 imdb = get_imdb(imdb_name)
 rdl_roidb.prepare_roidb(imdb)
 roidb = imdb.roidb
 data_layer = RoIDataLayer(roidb, imdb.num_classes)
 
+# load test data
+imdb_test = get_imdb(imdb_name_test)
+imdb_test.competition_mode(on=True)
+
+print('before init')
 # Create network and initialize
 net = WSDDN(classes=imdb.classes, debug=_DEBUG)
 network.weights_normal_init(net, dev=0.001)
@@ -88,6 +95,7 @@ else:
     pkl.dump(pret_net, open('pretrained_alexnet.pkl','wb'), pkl.HIGHEST_PROTOCOL)
 own_state = net.state_dict()
 
+print('before loop')
 for name, param in pret_net.items():
     if name not in own_state:
         continue
@@ -113,11 +121,15 @@ optimizer = torch.optim.SGD(params[2:], lr=lr,
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
+
+
 # training
 train_loss = 0
 tp, tf, fg, bg = 0., 0., 0, 0
 step_cnt = 0
 re_cnt = False
+num_cls = imdb.num_classes
+classes = imdb.classes
 t = Timer()
 t.tic()
 for step in range(start_step, end_step+1):
@@ -155,7 +167,22 @@ for step in range(start_step, end_step+1):
         re_cnt = True
 
     #TODO: evaluate the model every N iterations (N defined in handout)
+    if step % 5 == 0:
+    	net.eval()
+    	ap_mean, ap_all = test_net('{}_{}', net, imdb_test, visualize=visualize, logger=logger, step=step)
+    	print(ap_mean)
 
+    	# tensorboard
+    	logger.scalar_summary('evaluate/mAP', ap_mean, step)
+    	for k in range(num_cls):
+    		logger.scalar_summary('evaluate/AP_' + classes[k], ap_all[k], step)
+    	#visdom
+    	if step == 0:
+	        win_e = vis.line(Y=np.array([ap_mean]), X=np.array([step]), opts=dict(title='test mAP'))
+    	else:
+	        vis.line(Y=np.array([ap_mean]), X=np.array([step]), win=win_e, update='append')
+
+    	net.train()
 
     #TODO: Perform all visualizations here
     #You can define other interval variable if you want (this is just an
@@ -167,12 +194,15 @@ for step in range(start_step, end_step+1):
             # print('Logging to Tensorboard')
             if step % 5 == 0:
             	logger.scalar_summary('train/loss', loss.data[0], step)
-            if step % 20 == 0:
+            if step % 2000 == 0:
             	logger.model_param_histo_summary(net, step)
             if step % vis_interval == 0:
             	pass
         if use_visdom:
-        	pass
+        	if step == 0:
+        		win = vis.line(Y=np.array([loss.data[0]]), X=np.array([step]), opts=dict(title='training loss'))
+        	elif step % 5 == 0:
+        		vis.line(Y=np.array([loss.data[0]]), X=np.array([step]), win=win, update='append')
             # print('Logging to visdom')
 
     
