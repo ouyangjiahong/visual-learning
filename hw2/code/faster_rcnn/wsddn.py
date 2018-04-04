@@ -58,28 +58,33 @@ class WSDDN(nn.Module):
             nn.Conv2d(256, 256, (3, 3), (1, 1), (1, 1)),
             nn.ReLU(inplace=True))
 
-        # self.roi_pool = RoIPool(6, 6, 1.0/16)
-        # self.classifier = nn.Sequential(
-        #     nn.Linear(in_features=9216, out_features=4096),
-        #     nn.ReLU(inplace=True),
-        #     nn.Dropout(p=0.5),
-        #     nn.Linear(in_features=4096, out_features=4096),
-        #     nn.ReLU(inplace=True))
+        self.roi_pool = RoIPool(6, 6, 1.0/16)
+        self.classifier = nn.Sequential(
+            nn.Linear(in_features=9216, out_features=4096),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.5),
+            nn.Linear(in_features=4096, out_features=4096),
+            nn.ReLU(inplace=True))
+
+        self.score_cls = nn.Linear(in_features=4096, out_features=20)
+        self.score_det = nn.Linear(in_features=4096, out_features=20)
         # self.score_cls = FC(in_features=4096, out_features=20)
         # self.score_det = FC(in_features=4096, out_features=20)
 
-        self.roi_pool = RoIPool(2, 2, 0.06)
+        # self.roi_pool = RoIPool(2, 2, 0.06)
 
-        self.classifier = nn.Sequential(
-            nn.Linear(in_features=1024, out_features=1024),
-            nn.ReLU(inplace=True),
-            nn.Dropout(p=0.5),
-            nn.Linear(in_features=1024, out_features=1024),
-            nn.ReLU(inplace=True))
+        # self.classifier = nn.Sequential(
+        #     nn.Linear(in_features=1024, out_features=1024),
+        #     nn.ReLU(inplace=True),
+        #     nn.Dropout(p=0.5),
+        #     nn.Linear(in_features=1024, out_features=1024),
+        #     nn.ReLU(inplace=True))
 
-        self.score_cls = FC(in_features=1024, out_features=20)
-        self.score_det = FC(in_features=1024, out_features=20)
 
+        # self.score_cls = nn.Linear(in_features=1024, out_features=20)
+        # self.score_det = nn.Linear(in_features=1024, out_features=20)
+        # self.score_cls = FC(in_features=1024, out_features=20)
+        # self.score_det = FC(in_features=1024, out_features=20)
 
         # loss
         self.cross_entropy = None

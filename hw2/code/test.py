@@ -47,16 +47,19 @@ if rand_seed is not None:
 cfg_from_file(cfg_file)
 
 
-def vis_detections(im, class_name, dets, thresh=thresh):
+def vis_detections(im, class_name, dets, thresh=0.01):
     """Visual debugging of detections."""
-    for i in range(np.minimum(10, dets.shape[0])):
+    im_copy = im.astype(np.uint8).copy()
+    for i in range(np.minimum(3, dets.shape[0])):
         bbox = tuple(int(np.round(x)) for x in dets[i, :4])
         score = dets[i, -1]
+        if i == 0:
+            print(np.max(score))
         if score > thresh:
-            cv2.rectangle(im, bbox[0:2], bbox[2:4], (0, 204, 0), 2)
-            cv2.putText(im, '%s: %.3f' % (class_name, score), (bbox[0], bbox[1] + 15), cv2.FONT_HERSHEY_PLAIN,
+            cv2.rectangle(im_copy, bbox[0:2], bbox[2:4], (0, 204, 0), 2)
+            cv2.putText(im_copy, '%s: %.3f' % (class_name, score), (bbox[0], bbox[1] + 15), cv2.FONT_HERSHEY_PLAIN,
                         1.0, (0, 0, 255), thickness=1)
-    return im
+    return im_copy
 
 
 def im_detect(net, image, rois):
@@ -89,11 +92,11 @@ def im_detect(net, image, rois):
     return scores, pred_boxes
 
 
-def test_net(name, net, imdb, max_per_image=300, thresh=0.05, visualize=False,
+def test_net(name, net, imdb, max_per_image=300, thresh=0.00001, visualize=False,
              logger=None, step=None):
     """Test a Fast R-CNN network on an image database."""
     num_images = len(imdb.image_index)
-    num_images = 200
+    # num_images = 200
     # all detections are collected into:
     #    all_boxes[cls][image] = N x 5 array of detections in
     #    (x1, y1, x2, y2, score)
@@ -107,13 +110,15 @@ def test_net(name, net, imdb, max_per_image=300, thresh=0.05, visualize=False,
     det_file = os.path.join(output_dir, 'detections.pkl')
 
     plot_num = 0
+    print("get into evaluate")
     for i in range(num_images):
         im = cv2.imread(imdb.image_path_at(i))
         rois = imdb.roidb[i]['boxes']
 
         _t['im_detect'].tic()
         scores, boxes = im_detect(net, im, rois)
-        scores_all[i, :] = np.sum(scores, axis=0, keepdims=True)
+        # print(boxes.shape)
+        # print(scores.shape)
         detect_time = _t['im_detect'].toc(average=False)
 
         _t['misc'].tic()
@@ -149,7 +154,7 @@ def test_net(name, net, imdb, max_per_image=300, thresh=0.05, visualize=False,
 
         print('im_detect: {:d}/{:d} {:.3f}s {:.3f}s'.format(i + 1, num_images, detect_time, nms_time))
 
-        if visualize and np.random.rand()<0.01:
+        if visualize and np.random.rand()<0.1:
             # TODO: Visualize here using tensorboard
             # TODO: use the logger that is an argument to this function
             print('Visualizing')

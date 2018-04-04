@@ -233,7 +233,7 @@ class pascal_voc(imdb):
       gt_classes[ix] = cls + 1
       overlaps[ix, cls+1] = 1.0
       seg_areas[ix] = (x2 - x1 + 1) * (y2 - y1 + 1)
-    
+
     overlaps = scipy.sparse.csr_matrix(overlaps)
 
     return {'boxes': boxes,
@@ -256,6 +256,9 @@ class pascal_voc(imdb):
       'VOC' + self._year,
       'Main',
       filename)
+    tmp = os.path.join(self._devkit_path, 'results','VOC' + self._year,'Main')
+    if not os.path.exists(tmp):
+      os.makedirs(tmp)
     return path
 
   def _write_voc_results_file(self, all_boxes):
@@ -267,6 +270,8 @@ class pascal_voc(imdb):
       print('Writing {} VOC results file {}'.format(cls,filename))
       with open(filename, 'wt') as f:
         for im_ind, index in enumerate(self.image_index):
+          if im_ind >= len(all_boxes[0]):
+            break
           dets = all_boxes[cls_ind][im_ind]
           if dets == []:
             continue
@@ -300,6 +305,7 @@ class pascal_voc(imdb):
       if cls == '__background__':
         continue
       filename = self._get_voc_results_file_template().format(cls)
+      print(annopath)
       rec, prec, ap = voc_eval(
         filename, annopath, imagesetfile, cls, cachedir, ovthresh=0.5,
         use_07_metric=use_07_metric)

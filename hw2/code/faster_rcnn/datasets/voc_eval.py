@@ -103,6 +103,7 @@ def voc_eval(detpath,
   if not os.path.isdir(cachedir):
     os.mkdir(cachedir)
   cachefile = os.path.join(cachedir, 'annots.pkl')
+  print(cachefile)
   # read list of images
   with open(imagesetfile, 'r') as f:
     lines = f.readlines()

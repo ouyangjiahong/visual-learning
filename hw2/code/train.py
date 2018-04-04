@@ -95,18 +95,32 @@ else:
     pkl.dump(pret_net, open('pretrained_alexnet.pkl','wb'), pkl.HIGHEST_PROTOCOL)
 own_state = net.state_dict()
 
+
 print('before loop')
 for name, param in pret_net.items():
-    if name not in own_state:
-        continue
-    if isinstance(param, Parameter):
-        param = param.data
-    try:
-        own_state[name].copy_(param)
-        print('Copied {}'.format(name))
-    except:
-        print('Did not find {}'.format(name))
-        continue
+	if name.split('.')[0] == 'features':
+	    if name not in own_state:
+	        continue
+	    if isinstance(param, Parameter):
+	        param = param.data
+	    try:
+	        own_state[name].copy_(param)
+	        print('Copied {}'.format(name))
+	    except:
+	        print('Did not find {}'.format(name))
+	        continue
+	else:
+		# load the classifier layers
+		if name.split('.')[1] == '1' or name.split('.')[1] == '4':
+			if isinstance(param, Parameter):
+				param = param.data
+			try:
+				name = 'classifier.' + str(int(name.split('.')[1])-1) + '.' + name.split('.')[2]
+				own_state[name].copy_(param)
+				print('Copied {}'.format(name))
+			except:
+				print('Did not find {}'.format(name))
+				continue
 
 # Move model to GPU and set train mode
 net.cuda()
@@ -167,7 +181,7 @@ for step in range(start_step, end_step+1):
         re_cnt = True
 
     #TODO: evaluate the model every N iterations (N defined in handout)
-    if step % 5 == 0:
+    if step % vis_interval == 0:
     	net.eval()
     	# ap_mean, ap_all = test_net('{}_{}', net, imdb_test, visualize=visualize, logger=logger, step=step)
         aps = test_net('{}_{}', net, imdb_test, visualize=visualize, logger=logger, step=step)
@@ -194,16 +208,14 @@ for step in range(start_step, end_step+1):
         #TODO: Create required visualizations
         if use_tensorboard:
             # print('Logging to Tensorboard')
-            if step % 5 == 0:
+            if step % 500 == 0:
             	logger.scalar_summary('train/loss', loss.data[0], step)
             if step % 2000 == 0:
             	logger.model_param_histo_summary(net, step)
-            if step % vis_interval == 0:
-            	pass
         if use_visdom:
         	if step == 0:
         		win = vis.line(Y=np.array([loss.data[0]]), X=np.array([step]), opts=dict(title='training loss'))
-        	elif step % 5 == 0:
+        	elif step % 500 == 0:
         		vis.line(Y=np.array([loss.data[0]]), X=np.array([step]), win=win, update='append')
             # print('Logging to visdom')
 
