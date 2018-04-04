@@ -47,7 +47,7 @@ if rand_seed is not None:
 cfg_from_file(cfg_file)
 
 
-def vis_detections(im, class_name, dets, thresh=thresh):
+def vis_detections(im, class_name, dets, thresh=0.8):
     """Visual debugging of detections."""
     for i in range(np.minimum(10, dets.shape[0])):
         bbox = tuple(int(np.round(x)) for x in dets[i, :4])
@@ -106,10 +106,18 @@ def test_net(name, net, imdb, max_per_image=300, thresh=0.05, visualize=False,
     _t = {'im_detect': Timer(), 'misc': Timer()}
     det_file = os.path.join(output_dir, 'detections.pkl')
 
+    scores_all = np.zeros((num_images, 20))
+    gt_all = np.zeros((num_images, 20))
     plot_num = 0
     for i in range(num_images):
         im = cv2.imread(imdb.image_path_at(i))
         rois = imdb.roidb[i]['boxes']
+
+        gt = imdb.roidb[i]['gt_classes']
+        gt = list(set(gt - 1))
+        if -1 in gt:
+            gt.remove(-1)
+        gt_all[i, gt] = 1
 
         _t['im_detect'].tic()
         scores, boxes = im_detect(net, im, rois)
@@ -159,12 +167,28 @@ def test_net(name, net, imdb, max_per_image=300, thresh=0.05, visualize=False,
             #cv2.imshow('test', im2show)
             #cv2.waitKey(1)
 
+    # show mAP
+    def metric(output, target):
+        bs, num_cls = target.shape
+        ap_all = []
+        for i in range(num_cls):
+            tar_cls = target[:, i]
+            out_cls = output[:, i]
+            out_cls -= 1e-5 * tar_cls
+            ap = sklearn.metrics.average_precision_score(tar_cls, out_cls, average=None)
+            ap_all.append(ap)
+        ap_mean = np.sum(ap_all) / float(num_cls)
+        return ap_mean, ap_all
+
+    ap_mean, ap_all = metric(scores_all, gt_all)
+
     with open(det_file, 'wb') as f:
         cPickle.dump(all_boxes, f, cPickle.HIGHEST_PROTOCOL)
 
     print('Evaluating detections')
-    aps = imdb.evaluate_detections(all_boxes, output_dir)
-    return aps
+    # aps = imdb.evaluate_detections(all_boxes, output_dir)
+    # return aps
+    return ap_mean, ap_all
 
 
 if __name__ == '__main__':

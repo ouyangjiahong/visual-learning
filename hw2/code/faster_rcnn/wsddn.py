@@ -42,7 +42,7 @@ class WSDDN(nn.Module):
             self.classes = classes
             self.n_classes = len(classes)
             print(classes)
-        
+
         #TODO: Define the WSDDN model
         self.features = nn.Sequential(
             nn.Conv2d(3, 64, (11, 11), (4, 4), (2, 2)),
@@ -57,7 +57,7 @@ class WSDDN(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, (3, 3), (1, 1), (1, 1)),
             nn.ReLU(inplace=True))
-            
+
         # self.roi_pool = RoIPool(6, 6, 1.0/16)
         # self.classifier = nn.Sequential(
         #     nn.Linear(in_features=9216, out_features=4096),
@@ -79,8 +79,8 @@ class WSDDN(nn.Module):
 
         self.score_cls = FC(in_features=1024, out_features=20)
         self.score_det = FC(in_features=1024, out_features=20)
-        
-        
+
+
         # loss
         self.cross_entropy = None
 
@@ -90,17 +90,17 @@ class WSDDN(nn.Module):
     @property
     def loss(self):
         return self.cross_entropy
-	
+
     def forward(self, im_data, rois, im_info, gt_vec=None,
                 gt_boxes=None, gt_ishard=None, dontcare_areas=None):
         im_data = network.np_to_variable(im_data, is_cuda=True)
         im_data = im_data.permute(0, 3, 1, 2)
-	
+
         #TODO: Use im_data and rois as input
         # compute cls_prob which are N_roi X 20 scores
         # Checkout faster_rcnn.py for inspiration
         rois = network.np_to_variable(rois, is_cuda=True)
-        
+
         x = self.features(im_data)
         x = self.roi_pool(x, rois)
         x = x.view(x.size(0), -1)
@@ -115,19 +115,17 @@ class WSDDN(nn.Module):
         # print(cls_prob.shape)
 
 
-
-
         if self.training:
             label_vec = network.np_to_variable(gt_vec, is_cuda=True)
             # label_vec = label_vec.view(self.n_classes,-1)
             self.cross_entropy = self.build_loss(cls_prob, label_vec)
         return cls_prob
-    
+
     def build_loss(self, cls_prob, label_vec):
         """Computes the loss
 
         :cls_prob: N_roix20 output scores
-        :label_vec: 1x20 one hot label vector 
+        :label_vec: 1x20 one hot label vector
         :returns: loss
 
         """
@@ -136,9 +134,10 @@ class WSDDN(nn.Module):
         #Checkout forward() to see how it is called
         # label_vec = torch.squeeze(label_vec)
         label_pre = torch.sum(cls_prob, dim=0, keepdim=True)    #1*20
-        loss = 0
-        for i in range(self.n_classes):
-            loss += F.binary_cross_entropy(label_pre[:,i], label_vec[:,i])
+        # loss = 0
+        # for i in range(self.n_classes):
+        #     loss += F.binary_cross_entropy(label_pre[:,i], label_vec[:,i])
+        loss = F.binary_cross_entropy(label_pre, label_vec, size_average=False)
         return loss
 
     def get_image_blob_noscale(self, im):
@@ -178,7 +177,7 @@ class WSDDN(nn.Module):
     def load_from_npz(self, params):
         self.features.load_from_npz(params)
 
-        pairs = {'fc6.fc': 'fc6', 'fc7.fc': 'fc7', 
+        pairs = {'fc6.fc': 'fc6', 'fc7.fc': 'fc7',
                  'score_fc.fc': 'cls_score', 'bbox_fc.fc': 'bbox_pred'}
         own_dict = self.state_dict()
         for k, v in pairs.items():
@@ -189,4 +188,3 @@ class WSDDN(nn.Module):
             key = '{}.bias'.format(k)
             param = torch.from_numpy(params['{}/biases:0'.format(v)])
             own_dict[key].copy_(param)
-

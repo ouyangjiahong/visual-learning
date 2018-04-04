@@ -117,11 +117,9 @@ class LocalizerAlexNetRobust(nn.Module):
         self.features = nn.Sequential(
             nn.Conv2d(3, 64, (11, 11), (4, 4), (2, 2)),
             nn.ReLU(inplace=True),
-            nn.Dropout2d(p=0.2),
             nn.MaxPool2d((3, 3), (2, 2), dilation=(1, 1), ceil_mode=False),
             nn.Conv2d(64, 192, (5, 5), (1, 1), (2, 2)),
             nn.ReLU(inplace=True),
-            nn.Dropout2d(p=0.2),
             nn.MaxPool2d((3, 3), (2, 2), dilation=(1, 1), ceil_mode=False),
             nn.Conv2d(192, 384, (3, 3), (1, 1), (1, 1)),
             nn.ReLU(inplace=True),
@@ -130,6 +128,7 @@ class LocalizerAlexNetRobust(nn.Module):
             nn.Conv2d(256, 256, (3, 3), (1, 1), (1, 1)),
             nn.ReLU(inplace=True))
         self.classifier = nn.Sequential(
+            nn.Dropout2d(p=0.5),
             nn.Conv2d(256, 256, (3, 3), (1, 1)),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, (1, 1), (1, 1)),
@@ -193,22 +192,22 @@ def localizer_alexnet_robust(pretrained=False, **kwargs):
     #TODO: Ignore for now until instructed
     if pretrained == True:
         pretrained_state_ori = model_zoo.load_url(model_urls['alexnet'].replace('https://', 'http://'))
-        # pretrained_state = {k: v for k, v in pretrained_state.items() if k.split('.')[0] == 'features'}
-        pretrained_state = {}
-        for k, v in pretrained_state_ori.items():
-            if k.split('.')[0] == 'features':
-                k_split = k.split('.')
-                print(k_split[1])
-                if k_split[1] == '3':
-                    k = 'features.4.' + k_split[2]
-                elif k_split[1] == '6' or k_split[1] == '8' or k_split[1] == '10':
-                    k = 'features.' + str(int(k_split[1])+2) + '.' + k_split[2]
-                print(k)
-                pretrained_state[k] = v
-
+        pretrained_state = {k: v for k, v in pretrained_state.items() if k.split('.')[0] == 'features'}
         model_state = model.state_dict()
         model_state.update(pretrained_state)
         model.load_state_dict(model_state)
+
+        # pretrained_state = {}
+        # for k, v in pretrained_state_ori.items():
+        #     if k.split('.')[0] == 'features':
+        #         k_split = k.split('.')
+        #         print(k_split[1])
+        #         if k_split[1] == '3':
+        #             k = 'features.4.' + k_split[2]
+        #         elif k_split[1] == '6' or k_split[1] == '8' or k_split[1] == '10':
+        #             k = 'features.' + str(int(k_split[1])+2) + '.' + k_split[2]
+        #         print(k)
+        #         pretrained_state[k] = v
         # alexnet_model = models.__dict__['alexnet'](pretrained=True)
         # model.features = alexnet_model.features
         for layer in model.classifier:

@@ -29,7 +29,7 @@ except ImportError:
 
 vis = visdom.Visdom(server='http://128.2.176.219', port='8097')
 log_dir = 'model/'
-logger = Logger(log_dir, name = 'wsddn')	
+logger = Logger(log_dir, name = 'wsddn')
 
 def log_print(text, color=None, on_color=None, attrs=None):
     if cprint is not None:
@@ -115,7 +115,7 @@ net.train()
 
 # Create optimizer for network parameters
 params = list(net.parameters())
-optimizer = torch.optim.SGD(params[2:], lr=lr, 
+optimizer = torch.optim.SGD(params[2:], lr=lr,
                             momentum=momentum, weight_decay=weight_decay)
 
 if not os.path.exists(output_dir):
@@ -156,7 +156,7 @@ for step in range(start_step, end_step+1):
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-    
+
     # Log to screen
     if step % disp_interval == 0:
         duration = t.toc(average=False)
@@ -169,13 +169,15 @@ for step in range(start_step, end_step+1):
     #TODO: evaluate the model every N iterations (N defined in handout)
     if step % 5 == 0:
     	net.eval()
-    	ap_mean, ap_all = test_net('{}_{}', net, imdb_test, visualize=visualize, logger=logger, step=step)
-    	print(ap_mean)
+    	# ap_mean, ap_all = test_net('{}_{}', net, imdb_test, visualize=visualize, logger=logger, step=step)
+        aps = test_net('{}_{}', net, imdb_test, visualize=visualize, logger=logger, step=step)
+    	print(aps)
+        ap_mean = np.mean(aps)
 
     	# tensorboard
     	logger.scalar_summary('evaluate/mAP', ap_mean, step)
     	for k in range(num_cls):
-    		logger.scalar_summary('evaluate/AP_' + classes[k], ap_all[k], step)
+    		logger.scalar_summary('evaluate/AP_' + classes[k], aps[k], step)
     	#visdom
     	if step == 0:
 	        win_e = vis.line(Y=np.array([ap_mean]), X=np.array([step]), opts=dict(title='test mAP'))
@@ -205,8 +207,8 @@ for step in range(start_step, end_step+1):
         		vis.line(Y=np.array([loss.data[0]]), X=np.array([step]), win=win, update='append')
             # print('Logging to visdom')
 
-    
-    # Save model occasionally 
+
+    # Save model occasionally
     if (step % cfg.TRAIN.SNAPSHOT_ITERS == 0) and step > 0:
         save_name = os.path.join(output_dir, '{}_{}.h5'.format(cfg.TRAIN.SNAPSHOT_PREFIX,step))
         network.save_net(save_name, net)
@@ -221,4 +223,3 @@ for step in range(start_step, end_step+1):
         step_cnt = 0
         t.tic()
         re_cnt = False
-
