@@ -211,8 +211,9 @@ def main():
 def denormalize(image):
     std = [0.229, 0.224, 0.225]
     mean = [0.485, 0.456, 0.406]
-    for i in range(3):
-        image[i] = image[i] * std[i] + mean[i]
+    image = image * std + mean
+    # for i in range(3):
+    #     image[i] = image[i] * std[i] + mean[i]
     return image
 
 
@@ -223,10 +224,10 @@ def plot_random(model, val_loader):
         input_var = torch.autograd.Variable(input, requires_grad=True)
         target_var = torch.autograd.Variable(target)
 
-        output = model(input_var)        
+        output = model(input_var)
         output_sig = F.sigmoid(output)
         n, m = output_sig.size(2), output_sig.size(3)
-        
+
         output_imgs = output_sig.cpu().data.numpy()
         input_imgs = input.numpy()
         input_all = input_imgs
@@ -238,7 +239,7 @@ def plot_random(model, val_loader):
 
             gt_cls = [i for i, x in enumerate(target[j]) if x == 1]
             for k in range(len(gt_cls)):
-                tmp = output_imgs[j][gt_cls[0]]
+                tmp = output_imgs[j][gt_cls[k]]
                 tmp = sci.imresize(tmp, (h, w))
                 vis.heatmap(tmp, opts=dict(title='random' + format(j, '02d') + '_heatmap_' + CLASS_NAMES[gt_cls[k]]))
         break
@@ -272,19 +273,19 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
         # TODO: Compute loss using ``criterion``
         # compute output
         bs = input.size(0)
-        output = model(input_var)        
+        output = model(input_var)
         # sigmoid = nn.Sigmoid()
         # output_sig = sigmoid(output)
         output_sig = F.sigmoid(output)
         n, m = output_sig.size(2), output_sig.size(3)
         imoutput = F.max_pool2d(output_sig, kernel_size=(n,m))
-        imoutput = torch.squeeze(imoutput)
+        imoutput = torch.squeeze(imoutput) #32*20
         # compute loss
         loss = criterion(imoutput, target_var)
         # loss = F.binary_cross_entropy_with_logits(imoutput, target_var)
 
         # measure metrics and record loss
-        m1 = np.mean(metric1(imoutput.data, target))
+        m1 = metric1(imoutput.data, target)
         m2 = metric2(imoutput.data, target)
         losses.update(loss.data[0], input.size(0))
         # avg_m1.update(m1[0], input.size(0))
@@ -321,7 +322,7 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
             logger.scalar_summary('train/loss', loss, global_step)
             logger.scalar_summary('train/metric1', avg_m1.val, global_step)
             logger.scalar_summary('train/metric2', avg_m2.val, global_step)
-        
+
         # save images and heatmaps
         if i % (steps_per_epoch // 4) == steps_per_epoch//4 - 1:
             print('draw')
@@ -355,7 +356,7 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
             # visdom
             # denorm = transforms.Lambda(denormalize)
             # for j in range(bs):
-            #     caption = format(epoch, '02d') + '_' + format(i, '03d') + '_' + format(j, '02d') + '_image' 
+            #     caption = format(epoch, '02d') + '_' + format(i, '03d') + '_' + format(j, '02d') + '_image'
             #     tmp = denorm(input_imgs[j])
             #     vis.image(tmp, opts=dict(title='Image', caption=caption))
             #     gt_cls = [k for k, x in enumerate(target[j]) if x == 1]
@@ -406,7 +407,7 @@ def validate(val_loader, num_cls, model, criterion, epoch, logger):
         loss = criterion(imoutput, target_var)
 
         # measure metrics and record loss
-        m1 = np.mean(metric1(imoutput.data, target))
+        m1 = metric1(imoutput.data, target)
         m2 = metric2(imoutput.data, target)
         losses.update(loss.data[0], input.size(0))
         # avg_m1.update(m1[0], input.size(0))
