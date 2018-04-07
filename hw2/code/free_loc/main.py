@@ -40,7 +40,7 @@ model_names = sorted(name for name in models.__dict__
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('--arch', default='localizer_alexnet')
-parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=2, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=30, type=int, metavar='N',
                     help='number of total epochs to run')
@@ -223,10 +223,10 @@ def plot_random(model, val_loader):
         input_var = torch.autograd.Variable(input, requires_grad=True)
         target_var = torch.autograd.Variable(target)
 
-        output = model(input_var)        
+        output = model(input_var)
         output_sig = F.sigmoid(output)
         n, m = output_sig.size(2), output_sig.size(3)
-        
+
         output_imgs = output_sig.cpu().data.numpy()
         input_imgs = input.numpy()
         input_all = input_imgs
@@ -272,19 +272,20 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
         # TODO: Compute loss using ``criterion``
         # compute output
         bs = input.size(0)
-        output = model(input_var)        
-        # sigmoid = nn.Sigmoid()
-        # output_sig = sigmoid(output)
-        output_sig = F.sigmoid(output)
-        n, m = output_sig.size(2), output_sig.size(3)
-        imoutput = F.max_pool2d(output_sig, kernel_size=(n,m))
-        imoutput = torch.squeeze(imoutput)
+        heatmap = model(input_var)
+        n, m = heatmap.size(2), heatmap.size(3)
+        output = F.max_pool2d(heatmap, kernel_size=(n,m))
+        output = torch.squeeze(output)
+        imoutput = F.sigmoid(output)
+
+        heatmap = F.sigmoid(heatmap)
+
         # compute loss
         loss = criterion(imoutput, target_var)
         # loss = F.binary_cross_entropy_with_logits(imoutput, target_var)
 
         # measure metrics and record loss
-        m1 = np.mean(metric1(imoutput.data, target))
+        m1 = metric1(imoutput.data, target)
         m2 = metric2(imoutput.data, target)
         losses.update(loss.data[0], input.size(0))
         # avg_m1.update(m1[0], input.size(0))
@@ -321,49 +322,52 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
             logger.scalar_summary('train/loss', loss, global_step)
             logger.scalar_summary('train/metric1', avg_m1.val, global_step)
             logger.scalar_summary('train/metric2', avg_m2.val, global_step)
-        
+
         # save images and heatmaps
         if i % (steps_per_epoch // 4) == steps_per_epoch//4 - 1:
-            print('draw')
-            # tensorboard
+
             global_step = epoch * steps_per_epoch + i
-            input_imgs = input.numpy()
-            bs, ch, h, w = input_imgs.shape
-            # logger.image_summary('train/images', input_imgs, global_step) # how to transofrm rgb image
-
-            #save heatmaps, if multiple, save the first one
-            # output = F.sigmoid(output)
-            output_imgs = output_sig.cpu().data.numpy()
-            # bs, c, n, m = output_imgs.shape
-            heatmap_all = np.ones((1, bs*h, w))
-            input_all = np.ones((ch, bs*h, w))
-            for j in range(bs):
-                gt_cls = [k for k, x in enumerate(target[j]) if x == 1]
-                tmp = output_imgs[j][gt_cls[0]]
-                # print(np.max(tmp))
-                tmp = sci.imresize(tmp, (h, w))
-                # concatenate images and heatmaps into a long image
-                heatmap_all[:, j*h:(j+1)*h, :] = tmp
-                input_all[:, j*h:(j+1)*h, :] = input_imgs[j]
-
-
-            logger.image_summary('train/images', [input_all], global_step)
-            logger.image_summary('train/heatmaps', heatmap_all, global_step)
-
             logger.model_param_histo_summary(model, global_step)
 
-            # visdom
-            # denorm = transforms.Lambda(denormalize)
-            # for j in range(bs):
-            #     caption = format(epoch, '02d') + '_' + format(i, '03d') + '_' + format(j, '02d') + '_image' 
-            #     tmp = denorm(input_imgs[j])
-            #     vis.image(tmp, opts=dict(title='Image', caption=caption))
-            #     gt_cls = [k for k, x in enumerate(target[j]) if x == 1]
-            #     for k in range(len(gt_cls)):
-            #         tmp = output_imgs[j][gt_cls[k]]
-            #         tmp = sci.imresize(tmp, (h, w))
-            #         caption = format(epoch, '02d') + '_' + format(i, '03d') + '_' + format(j, '02d') + '_heatmap_' + CLASS_NAMES[gt_cls[k]]
-            #         vis.heatmap(tmp, opts=dict(title=caption))
+            if epoch == 0 or epoch >= args.epochs - 1:  # just to accelerate speed
+                print('draw~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
+                # tensorboard
+                input_imgs = input.numpy()
+                bs, ch, h, w = input_imgs.shape
+                print(input_imgs.shape)
+                # logger.image_summary('train/images', input_imgs, global_step) # how to transofrm rgb image
+
+                #save heatmaps, if multiple, save the first one
+                # output = F.sigmoid(output)
+                output_imgs =heatmap.cpu().data.numpy()
+                # bs, c, n, m = output_imgs.shape
+                heatmap_all = np.ones((1, bs*h, w))
+                input_all = np.ones((ch, bs*h, w))
+                for j in range(bs):
+                    gt_cls = [k for k, x in enumerate(target[j]) if x == 1]
+                    tmp = output_imgs[j][gt_cls[0]]
+                    # print(np.max(tmp))
+                    tmp = sci.imresize(tmp, (h, w))
+                    # concatenate images and heatmaps into a long image
+                    heatmap_all[:, j*h:(j+1)*h, :] = tmp
+                    input_all[:, j*h:(j+1)*h, :] = input_imgs[j]
+
+                logger.image_summary('train/images', [input_all], global_step)
+                logger.image_summary('train/heatmaps', heatmap_all, global_step)
+
+
+            #visdom
+                denorm = transforms.Lambda(denormalize)
+                for j in range(bs):
+                    caption = format(epoch, '02d') + '_' + format(i, '03d') + '_' + format(j, '02d') + '_image'
+                    tmp = denorm(input_imgs[j])
+                    vis.image(tmp, opts=dict(title='Image', caption=caption))
+                    gt_cls = [k for k, x in enumerate(target[j]) if x == 1]
+                    for k in range(len(gt_cls)):
+                        tmp = output_imgs[j][gt_cls[k]]
+                        tmp = sci.imresize(tmp, (h, w))
+                        caption = format(epoch, '02d') + '_' + format(i, '03d') + '_' + format(j, '02d') + '_heatmap_' + CLASS_NAMES[gt_cls[k]]
+                        vis.heatmap(tmp, opts=dict(title=caption))
 
             #heatmap one image per batch
             # input_img = [input[0].numpy()]
@@ -395,18 +399,19 @@ def validate(val_loader, num_cls, model, criterion, epoch, logger):
         # TODO: Compute loss using ``criterion``
         # compute output
         bs = input.size(0)
-        output = model(input_var)
-        output_sig = F.sigmoid(output)
-        n, m = output_sig.size(2), output_sig.size(3)
-        imoutput = F.max_pool2d(output_sig, kernel_size=(n,m))
-        imoutput = torch.squeeze(imoutput)
-        # print(imoutput.size())
+        heatmap = model(input_var)
+        n, m = heatmap.size(2), heatmap.size(3)
+        output = F.max_pool2d(heatmap, kernel_size=(n,m))
+        output = torch.squeeze(output)
+        imoutput = F.sigmoid(output)
+
+        heatmap = F.sigmoid(heatmap)
 
         # compute loss
         loss = criterion(imoutput, target_var)
 
         # measure metrics and record loss
-        m1 = np.mean(metric1(imoutput.data, target))
+        m1 = metric1(imoutput.data, target)
         m2 = metric2(imoutput.data, target)
         losses.update(loss.data[0], input.size(0))
         # avg_m1.update(m1[0], input.size(0))
@@ -489,17 +494,18 @@ def metric1(output, target):
 
 def metric2(output, target):
     # TODO: Ignore for now - proceed till instructed
+
     bs, num_cls = target.shape
     k = 5
-    count = 0
     target = target.cpu().numpy()
+    tar_count = 0
+    pre_count = 0
     for i in range(bs):
-        out_idx = np.argsort(output[i,:])
-        top_idx = out_idx[0:k]
+        top_idx = np.argsort(output[i,:])[0:k]
+        tar_count += np.sum(target[i,:])
         count_tmp = target[i, top_idx]
-        count_tmp = np.sum(count_tmp)
-        count += (count_tmp>=1)
-    return count / float(bs)
+        pre_count += np.sum(count_tmp)
+    return float(pre_count) / tar_count
 
 if __name__ == '__main__':
     main()

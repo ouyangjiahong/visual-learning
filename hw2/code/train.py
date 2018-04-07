@@ -49,7 +49,7 @@ vis_interval = 5000
 
 start_step = 0
 end_step = 50000
-lr_decay_steps = {150000}
+lr_decay_steps = {2000}
 lr_decay = 1./10
 
 rand_seed = 1024
@@ -181,7 +181,7 @@ for step in range(start_step, end_step+1):
         re_cnt = True
 
     #TODO: evaluate the model every N iterations (N defined in handout)
-    if step % vis_interval == 0:
+    if step % vis_interval == 0 and step != 0:
     	net.eval()
     	# ap_mean, ap_all = test_net('{}_{}', net, imdb_test, visualize=visualize, logger=logger, step=step)
         aps = test_net('{}_{}', net, imdb_test, visualize=visualize, logger=logger, step=step)
