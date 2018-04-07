@@ -27,7 +27,7 @@ try:
 except ImportError:
     cprint = None
 
-vis = visdom.Visdom(server='http://128.2.176.219', port='8097')
+vis = visdom.Visdom(server='http://ec2-18-219-233-124.us-east-2.compute.amazonaws.com', port='8097')
 log_dir = 'model/'
 logger = Logger(log_dir, name = 'wsddn')
 
@@ -49,7 +49,7 @@ vis_interval = 5000
 
 start_step = 0
 end_step = 50000
-lr_decay_steps = {2000}
+lr_decay_steps = {20000}
 lr_decay = 1./10
 
 rand_seed = 1024

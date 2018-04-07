@@ -211,8 +211,9 @@ def main():
 def denormalize(image):
     std = [0.229, 0.224, 0.225]
     mean = [0.485, 0.456, 0.406]
-    for i in range(3):
-        image[i] = image[i] * std[i] + mean[i]
+    image = image * std + mean
+    # for i in range(3):
+    #     image[i] = image[i] * std[i] + mean[i]
     return image
 
 
@@ -238,7 +239,7 @@ def plot_random(model, val_loader):
 
             gt_cls = [i for i, x in enumerate(target[j]) if x == 1]
             for k in range(len(gt_cls)):
-                tmp = output_imgs[j][gt_cls[0]]
+                tmp = output_imgs[j][gt_cls[k]]
                 tmp = sci.imresize(tmp, (h, w))
                 vis.heatmap(tmp, opts=dict(title='random' + format(j, '02d') + '_heatmap_' + CLASS_NAMES[gt_cls[k]]))
         break
@@ -272,6 +273,7 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
         # TODO: Compute loss using ``criterion``
         # compute output
         bs = input.size(0)
+
         heatmap = model(input_var)
         n, m = heatmap.size(2), heatmap.size(3)
         output = F.max_pool2d(heatmap, kernel_size=(n,m))
@@ -279,6 +281,7 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
         imoutput = F.sigmoid(output)
 
         heatmap = F.sigmoid(heatmap)
+
 
         # compute loss
         loss = criterion(imoutput, target_var)
@@ -368,6 +371,7 @@ def train(train_loader, num_cls, model, criterion, optimizer, epoch, logger):
                         tmp = sci.imresize(tmp, (h, w))
                         caption = format(epoch, '02d') + '_' + format(i, '03d') + '_' + format(j, '02d') + '_heatmap_' + CLASS_NAMES[gt_cls[k]]
                         vis.heatmap(tmp, opts=dict(title=caption))
+
 
             #heatmap one image per batch
             # input_img = [input[0].numpy()]
