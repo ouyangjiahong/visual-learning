@@ -1,8 +1,9 @@
+import sys
+import torch
 import torch.utils.data as data
+import torch.nn.functional as F
 import torch.nn as nn
-import torch.nn.parameter as Parameter
 import torch.utils.model_zoo as model_zoo
-import torchvision.models as models
 model_urls = {
         'alexnet': 'https://download.pytorch.org/models/alexnet-owt-4df8aa71.pth',
 }
@@ -11,7 +12,7 @@ from PIL import Image
 import os
 import os.path
 import numpy as np
-# from myutils import *
+#from myutils import *
 
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm']
 
@@ -32,9 +33,11 @@ def is_image_file(filename):
 def find_classes(imdb):
     #TODO: classes: list of classes
     #TODO: class_to_idx: dictionary with keys=classes and values=class index
+
     classes = imdb._classes
     class_to_idx= imdb._class_to_ind
     return classes, class_to_idx
+
 
 
 def make_dataset(imdb, class_to_idx):
@@ -79,34 +82,35 @@ class LocalizerAlexNet(nn.Module):
     def __init__(self, num_classes=20):
         super(LocalizerAlexNet, self).__init__()
         #TODO: Define model
-        # Conv2d(in_cha, out_cha, kernel_size, strides, padding)
-        # MaxPool2d(kernel_size, strides, padding, dilation)
         self.features = nn.Sequential(
-            nn.Conv2d(3, 64, (11, 11), (4, 4), (2, 2)),
+            nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d((3, 3), (2, 2), dilation=(1, 1), ceil_mode=False),
-            nn.Conv2d(64, 192, (5, 5), (1, 1), (2, 2)),
+            nn.MaxPool2d(kernel_size=3, stride=2),
+            nn.Conv2d(64, 192, kernel_size=5, padding=2),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d((3, 3), (2, 2), dilation=(1, 1), ceil_mode=False),
-            nn.Conv2d(192, 384, (3, 3), (1, 1), (1, 1)),
+            nn.MaxPool2d(kernel_size=3, stride=2),
+            nn.Conv2d(192, 384, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(384, 256, (3, 3), (1, 1), (1, 1)),
+            nn.Conv2d(384, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, (3, 3), (1, 1), (1, 1)),
-            nn.ReLU(inplace=True))
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+        )
         self.classifier = nn.Sequential(
-            nn.Conv2d(256, 256, (3, 3), (1, 1)),
+            nn.Conv2d(256, 256, kernel_size=3),
             nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, (1, 1), (1, 1)),
+            nn.Conv2d(256, 256, kernel_size=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(256, 20, (1, 1), (1, 1)))
-
+            nn.Conv2d(256, num_classes, kernel_size=1, stride=1),
+        )
 
     def forward(self, x):
         #TODO: Define forward pass
         x = self.features(x)
         x = self.classifier(x)
         return x
+
+
 
 
 class LocalizerAlexNetRobust(nn.Module):
@@ -128,7 +132,7 @@ class LocalizerAlexNetRobust(nn.Module):
             nn.Conv2d(256, 256, (3, 3), (1, 1), (1, 1)),
             nn.ReLU(inplace=True))
         self.classifier = nn.Sequential(
-            nn.Dropout2d(p=0.5),
+            # nn.Dropout2d(p=0.5),
             nn.Conv2d(256, 256, (3, 3), (1, 1)),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, (1, 1), (1, 1)),
@@ -136,17 +140,26 @@ class LocalizerAlexNetRobust(nn.Module):
             nn.Conv2d(256, 20, (1, 1), (1, 1)))
 
 
-
     def forward(self, x):
         #TODO: Ignore for now until instructed
         x = self.features(x)
-        x = self.classifier(x)
+        heatmap = self.classifier(x)
+
+        avg1 = F.avg_pool2d(heatmap, (3,3))
+        avg2 = F.avg_pool2d(avg1, (3,3), 2)
+        m, n = heatmap.size()[2:]
+        # print(m)
+        max1 = F.max_pool2d(heatmap, (m,n))
+        m, n = avg1.size()[2:]
+        max2 = F.max_pool2d(avg1, (m,n))
+        m, n = avg2.size()[2:]
+        max3 = F.max_pool2d(avg2, (m,n))
+        x = max1 + max2 + max3
         return x
 
 
-
 def localizer_alexnet(pretrained=False, **kwargs):
-    r"""AlexNet model architecture from the
+    """AlexNet model architecture from the
     `"One weird trick..." <https://arxiv.org/abs/1404.5997>`_ paper.
 
     Args:
@@ -155,6 +168,7 @@ def localizer_alexnet(pretrained=False, **kwargs):
     model = LocalizerAlexNet(**kwargs)
     #TODO: Initialize weights correctly based on whether it is pretrained or
     #not
+
     if pretrained == True:
         print("load pretrained model")
         pretrained_state = model_zoo.load_url(model_urls['alexnet'].replace('https://', 'http://'))
@@ -163,26 +177,26 @@ def localizer_alexnet(pretrained=False, **kwargs):
         model_state.update(pretrained_state)
         model.load_state_dict(model_state)
 
-        # for name, param in pretrained_state.items():
-        #     if name not in model_state:
-        #         continue
-        #     # if isinstance(param, Parameter):
-        #     param = param.data
-        #     try:
-        #         model_state[name].copy_(param)
-        #         print('copied {}'.format(name))
-        #     except:
-        #         print('did not copied {}'.format(name))
-        #         continue
+    # for name, param in pretrained_state.items():
+    #     if name not in model_state:
+    #         continue
+    #     # if isinstance(param, Parameter):
+    #     param = param.data
+    #     try:
+    #         model_state[name].copy_(param)
+    #         print('copied {}'.format(name))
+    #     except:
+    #         print('did not copied {}'.format(name))
+    #         continue
 
-        for layer in model.classifier:
-            if type(layer) == nn.Conv2d:
-                nn.init.xavier_uniform(layer.weight)
-                # nn.init.xavier_uniform(layer.bias)
+    for layer in model.classifier:
+        if type(layer) == nn.Conv2d:
+            nn.init.xavier_uniform(layer.weight)
+            # nn.init.xavier_uniform(layer.bias)
     return model
 
 def localizer_alexnet_robust(pretrained=False, **kwargs):
-    r"""AlexNet model architecture from the
+    """AlexNet model architecture from the
     `"One weird trick..." <https://arxiv.org/abs/1404.5997>`_ paper.
 
     Args:
@@ -190,6 +204,9 @@ def localizer_alexnet_robust(pretrained=False, **kwargs):
     """
     model = LocalizerAlexNetRobust(**kwargs)
     #TODO: Ignore for now until instructed
+    #TODO: Initialize weights correctly based on whether it is pretrained or
+    #not
+
     if pretrained == True:
         pretrained_state_ori = model_zoo.load_url(model_urls['alexnet'].replace('https://', 'http://'))
         pretrained_state = {k: v for k, v in pretrained_state.items() if k.split('.')[0] == 'features'}
@@ -215,6 +232,7 @@ def localizer_alexnet_robust(pretrained=False, **kwargs):
                 nn.init.xavier_uniform(layer.weight)
 
     return model
+
 
 
 class IMDBDataset(data.Dataset):
@@ -268,6 +286,7 @@ class IMDBDataset(data.Dataset):
         if self.target_transform is not None:
             target = self.target_transform(target)
         return img, target
+
 
     def __len__(self):
         return len(self.imgs)

@@ -181,7 +181,7 @@ for step in range(start_step, end_step+1):
         re_cnt = True
 
     #TODO: evaluate the model every N iterations (N defined in handout)
-    if step % vis_interval == 0:
+    if step % vis_interval == 0 and step != 0:
     	net.eval()
     	# ap_mean, ap_all = test_net('{}_{}', net, imdb_test, visualize=visualize, logger=logger, step=step)
         aps = test_net('{}_{}', net, imdb_test, visualize=visualize, logger=logger, step=step)
